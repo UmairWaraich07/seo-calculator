@@ -1,34 +1,36 @@
-import { notFound } from "next/navigation"
-import { connectToDatabase } from "@/lib/mongodb"
-import { ObjectId } from "mongodb"
-import { Card } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import Link from "next/link"
-import { ResultsOverview } from "@/components/results-overview"
-import { KeywordTable } from "@/components/keyword-table"
+import { notFound } from "next/navigation";
+import { connectToDatabase } from "@/lib/mongodb";
+import { ObjectId } from "mongodb";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
+import { ResultsOverview } from "@/components/results-overview";
+import { KeywordTable } from "@/components/keyword-table";
 
 export default async function ResultsPage({
   params,
 }: {
-  params: { reportId: string }
+  params: { reportId: string };
 }) {
+  params = await params;
+  const reportId = (await params.reportId) || "47498393398";
   // Fetch report from database
-  const { db } = await connectToDatabase()
+  const { db } = await connectToDatabase();
 
-  let report
+  let report;
   try {
     report = await db.collection("reports").findOne({
-      _id: new ObjectId(params.reportId),
-    })
+      _id: new ObjectId(reportId),
+    });
   } catch (error) {
-    console.error("Error fetching report:", error)
+    console.error("Error fetching report:", error);
   }
 
   if (!report) {
-    notFound()
+    notFound();
   }
 
-  const { basicInfo, report: reportData } = report
+  const { basicInfo, report: reportData } = report;
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 py-12">
@@ -37,14 +39,18 @@ export default async function ResultsPage({
           <h1 className="text-4xl font-bold tracking-tight text-slate-900 sm:text-5xl mb-4">
             Your SEO Opportunity Report
           </h1>
-          <p className="text-xl text-slate-600 max-w-2xl mx-auto">Here's what we found for {basicInfo.businessUrl}</p>
+          <p className="text-xl text-slate-600 max-w-2xl mx-auto">
+            Here's what we found for {basicInfo.businessUrl}
+          </p>
         </div>
 
         <div className="space-y-8">
           <ResultsOverview reportData={reportData} basicInfo={basicInfo} />
 
           <Card className="p-6">
-            <h2 className="text-2xl font-bold mb-6">Top Keywords & Opportunities</h2>
+            <h2 className="text-2xl font-bold mb-6">
+              Top Keywords & Opportunities
+            </h2>
             <KeywordTable keywordData={reportData.keywordData} />
           </Card>
 
@@ -60,6 +66,5 @@ export default async function ResultsPage({
         </div>
       </div>
     </main>
-  )
+  );
 }
-
