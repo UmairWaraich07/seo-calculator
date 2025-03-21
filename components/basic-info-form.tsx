@@ -20,7 +20,7 @@ const formSchema = z.object({
   businessUrl: z.string().url("Please enter a valid URL"),
   businessType: z.string().min(2, "Please enter your business type"),
   location: z.string().min(2, "Please enter your location"),
-  customerValue: z.coerce.number().positive("Please enter a positive value"),
+  customerValue: z.string().min(1, "Please enter your average sale value"),
   competitorType: z.enum(["manual", "auto"]),
 });
 
