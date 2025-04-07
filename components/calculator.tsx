@@ -9,7 +9,6 @@ import { EmailForm } from "@/components/email-form";
 import { ProcessingScreen } from "@/components/processing-screen";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "@/components/ui/use-toast";
-import { v4 as uuidv4 } from "uuid";
 
 type CalculatorStep = "basic-info" | "competitors" | "processing" | "email";
 
@@ -44,12 +43,6 @@ export const Calculator = () => {
   const [progress, setProgress] = useState(0);
   const [processingStage, setProcessingStage] =
     useState<string>("initializing");
-  const [sessionId, setSessionId] = useState<string>("");
-
-  // Generate a unique session ID when the component mounts
-  useEffect(() => {
-    setSessionId(uuidv4());
-  }, []);
 
   const handleBasicInfoSubmit = async (data: BasicInfo) => {
     setBasicInfo(data);
@@ -62,31 +55,6 @@ export const Calculator = () => {
     setProgress(0);
     setProcessingStage("initializing");
 
-    // Connect to the progress stream
-    const eventSource = new EventSource(
-      `/api/process-progress?sessionId=${sessionId}`
-    );
-
-    eventSource.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        setProcessingStage(data.stage);
-        setProgress(data.progress);
-
-        // When processing is complete, close the connection
-        if (data.stage === "complete") {
-          eventSource.close();
-        }
-      } catch (error) {
-        console.error("Error parsing progress update:", error);
-      }
-    };
-
-    eventSource.onerror = () => {
-      console.error("EventSource failed");
-      eventSource.close();
-    };
-
     // Start the processing
     try {
       const response = await fetch("/api/process-seo", {
@@ -97,7 +65,6 @@ export const Calculator = () => {
         body: JSON.stringify({
           basicInfo,
           competitorInfo: data,
-          sessionId, // Pass the session ID to link progress updates
         }),
       });
 
@@ -109,8 +76,17 @@ export const Calculator = () => {
       const result = await response.json();
       setReportId(result.reportId);
 
-      // Move to email step (the progress stream will update the UI)
-      // The eventSource will be closed when progress reaches 100%
+      // Simulate progress updates
+      const interval = setInterval(() => {
+        setProgress((prev) => {
+          if (prev >= 95) {
+            clearInterval(interval);
+            setCurrentStep("email");
+            return 100;
+          }
+          return prev + 5;
+        });
+      }, 3000);
     } catch (error) {
       console.error("Error processing SEO data:", error);
       toast({
@@ -122,8 +98,6 @@ export const Calculator = () => {
       });
       // Reset to competitor step
       setCurrentStep("competitors");
-      // Close the event source
-      eventSource.close();
     }
   };
 
@@ -216,6 +190,7 @@ export const Calculator = () => {
           analysisScope={basicInfo.analysisScope}
           businessType={basicInfo.businessType}
           location={basicInfo.location}
+          businessUrl={basicInfo.businessUrl}
           initialValues={competitorInfo}
         />
       )}
@@ -224,7 +199,6 @@ export const Calculator = () => {
         <ProcessingScreen
           progress={progress}
           analysisScope={basicInfo.analysisScope}
-          stage={processingStage}
         />
       )}
 

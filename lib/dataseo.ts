@@ -87,7 +87,9 @@ export async function getKeywordData(
     );
 
     const processedData = processKeywordVolumeData(response, keywords);
-    console.log(`Keyword data fetched for ${processedData.length} keywords`);
+    console.log(
+      `search volume data fetched for ${processedData.length} keywords`
+    );
     return processedData;
   } catch (error) {
     console.error("Error getting keyword data:", error);
@@ -117,11 +119,6 @@ function processKeywordVolumeData(response: any, originalKeywords: string[]) {
                 keywordData.push({
                   keyword: item.keyword,
                   searchVolume: item.search_volume || 0,
-                  // We don't get these from the clickstream endpoint, but we'll add placeholders
-                  // that can be filled with data from other sources later
-                  keywordDifficulty: null,
-                  cpc: null,
-                  organicResults: [],
                 });
                 processedKeywords.add(item.keyword);
               }
@@ -500,7 +497,7 @@ export async function getDomainRankings(
     const locationCode = await getLocationCode(location);
 
     // Split keywords into batches of 50 (DataForSEO's limit)
-    const batchSize = 20; // Reduce batch size to avoid overloading the API
+    const batchSize = 50; // Reduce batch size to avoid overloading the API
     const keywordBatches = [];
 
     for (let i = 0; i < keywords.length; i += batchSize) {
@@ -545,7 +542,7 @@ export async function getDomainRankings(
         const taskIds = postResponse.tasks.map((task: any) => task.id);
 
         // Wait a moment for tasks to process
-        await new Promise((resolve) => setTimeout(resolve, 50000));
+        await new Promise((resolve) => setTimeout(resolve, 40000));
 
         // Poll for results using the updated polling function
         const taskResults = await pollForResults(taskIds);
@@ -639,7 +636,7 @@ export async function fetchKeywordData(
 
     // 1. Get ranked keywords for competitors only (not for client domain)
     const competitorRankedKeywordsPromises = competitorDomains.map((domain) =>
-      getRankedKeywords(domain, location, 50)
+      getRankedKeywords(domain, location, 10)
     );
 
     const competitorRankedKeywordsResults = await Promise.all(
@@ -658,14 +655,17 @@ export async function fetchKeywordData(
       });
     });
 
+    console.log(`all ranked keywords`, allRankedKeywords);
+
     // Combine our generated keywords with competitor ranked keywords
     const allKeywords = [
       ...new Set([...keywords, ...Array.from(allRankedKeywords.keys())]),
     ];
 
+    console.log(`Combined keywords for analysis: ${allKeywords.length}`);
+
     // 2. Get keyword data for all keywords using the clickstream data endpoint
     const keywordData = await getKeywordData(allKeywords, location);
-    console.log(`Keyword data fetched for ${keywordData.length} keywords`);
 
     // 3. Sort keywords by search volume and take only the top 50
     keywordData.sort((a, b) => (b.searchVolume || 0) - (a.searchVolume || 0));

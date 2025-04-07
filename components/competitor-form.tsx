@@ -33,6 +33,7 @@ interface CompetitorFormProps {
   analysisScope: "local" | "national";
   businessType: string;
   location: string;
+  businessUrl: string;
   initialValues: CompetitorInfo;
 }
 
@@ -42,6 +43,7 @@ export const CompetitorForm = ({
   analysisScope,
   businessType,
   location,
+  businessUrl,
   initialValues,
 }: CompetitorFormProps) => {
   const [isLoading, setIsLoading] = useState(false);
@@ -84,6 +86,7 @@ export const CompetitorForm = ({
         body: JSON.stringify({
           businessType,
           location,
+          businessUrl,
         }),
       });
 

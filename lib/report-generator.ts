@@ -1,3 +1,9 @@
+import OpenAI from "openai";
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY!,
+});
+
 /**
  * Calculate SEO opportunity metrics based on keyword data
  */
@@ -17,6 +23,7 @@ export async function calculateSeoOpportunity(
     businessType,
     analysisScope
   );
+  console.log("Conversion Rate:", conversionRate);
 
   // Calculate potential traffic and revenue
   // For local analysis, we'll focus on more targeted traffic
@@ -174,57 +181,181 @@ function generateNationalInsights(
 }
 
 /**
- * Get industry-specific conversion rates
+ * Get industry-specific conversion rates using OpenAI API with fallback
  */
 async function getIndustryConversionRate(
   businessType: string,
   analysisScope: "local" | "national"
 ): Promise<number> {
-  // This would be replaced with an actual API call or database lookup
-  // For now, we'll return some sample data based on business type and analysis scope
-  // Local businesses typically have higher conversion rates than national ones
+  try {
+    // Try OpenAI API first
+    const openAIConversionRate = await getConversionRateFromOpenAI(
+      businessType,
+      analysisScope
+    );
+    return openAIConversionRate;
+  } catch (error) {
+    console.error("OpenAI API failed, using fallback data:", error);
+    return getFallbackConversionRate(businessType, analysisScope);
+  }
+}
 
-  const localConversionRates: Record<string, number> = {
-    roofing: 4.2,
-    plumbing: 3.8,
-    "home improvement": 3.5,
-    landscaping: 4.0,
-    electrician: 3.7,
-    hvac: 4.1,
-    dental: 5.2,
-    legal: 4.8,
-    automotive: 3.3,
-    default: 3.0,
+// OpenAI API integration
+async function getConversionRateFromOpenAI(
+  businessType: string,
+  scope: "local" | "national"
+): Promise<number> {
+  const prompt = `
+  You are an SEO expert specializing in conversion rate estimation. 
+  Provide a SINGLE NUMERIC VALUE representing the average conversion rate percentage for:
+  - Industry: ${businessType}
+  - Scope: ${scope}
+  - Value should reflect 2023 marketing benchmarks
+  - Consider local scope as 30% higher than national averages
+  - Format: Only respond with the numeric value, no text
+  - Example: For "plumbing"+"local", return "3.8"
+  `;
+
+  const response = await openai.chat.completions.create({
+    model: "gpt-4o-mini",
+    messages: [{ role: "user", content: prompt }],
+    temperature: 0.2,
+    max_tokens: 10,
+  });
+
+  const rateText = response.choices[0]?.message?.content?.trim() || "0%";
+  const rate = parseFloat(rateText.replace("%", ""));
+
+  if (isNaN(rate)) throw new Error("Invalid numeric response from OpenAI");
+  if (rate < 0.1 || rate > 10)
+    throw new Error("Unrealistic conversion rate from OpenAI");
+
+  return rate;
+}
+
+// Fallback conversion rates
+const FALLBACK_CONVERSION_RATES: Record<
+  string,
+  { local: number; national: number }
+> = {
+  // Home Services
+  plumbing: { local: 3.8, national: 2.5 },
+  roofing: { local: 4.2, national: 2.8 },
+  electrical: { local: 4.0, national: 2.6 },
+  hvac: { local: 4.1, national: 2.7 },
+  landscaping: { local: 4.5, national: 3.0 },
+  cleaning: { local: 3.9, national: 2.6 },
+  painting: { local: 3.7, national: 2.4 },
+  "pest control": { local: 4.3, national: 2.9 },
+
+  // Professional Services
+  dental: { local: 5.5, national: 3.8 },
+  legal: { local: 4.8, national: 3.2 },
+  accounting: { local: 4.2, national: 3.0 },
+  "real estate": { local: 3.5, national: 2.4 },
+  insurance: { local: 3.2, national: 2.1 },
+  architecture: { local: 3.0, national: 2.0 },
+
+  // Medical
+  veterinary: { local: 4.6, national: 3.1 },
+  chiropractic: { local: 4.4, national: 3.0 },
+  "physical therapy": { local: 4.0, national: 2.8 },
+  optometry: { local: 4.1, national: 2.9 },
+
+  // Automotive
+  "auto repair": { local: 3.9, national: 2.6 },
+  "car dealership": { local: 2.8, national: 2.3 },
+  "tire shop": { local: 3.5, national: 2.4 },
+  "car wash": { local: 3.2, national: 2.1 },
+
+  // Retail
+  restaurant: { local: 4.0, national: 2.7 },
+  "coffee shop": { local: 3.8, national: 2.6 },
+  bakery: { local: 3.6, national: 2.5 },
+  furniture: { local: 2.9, national: 2.2 },
+  jewelry: { local: 3.1, national: 2.3 },
+
+  // Technology
+  "software development": { local: 2.5, national: 2.4 },
+  "it support": { local: 3.0, national: 2.5 },
+  "web design": { local: 3.2, national: 2.7 },
+  cybersecurity: { local: 2.8, national: 2.6 },
+
+  // Personal Services
+  fitness: { local: 3.7, national: 2.6 },
+  "hair salon": { local: 4.2, national: 2.9 },
+  spa: { local: 4.0, national: 2.8 },
+  tattoo: { local: 3.5, national: 2.5 },
+  yoga: { local: 3.3, national: 2.4 },
+
+  // Education
+  tutoring: { local: 3.8, national: 2.7 },
+  "language school": { local: 3.2, national: 2.5 },
+  "driving school": { local: 3.6, national: 2.6 },
+
+  // Specialized Services
+  "event planning": { local: 3.4, national: 2.5 },
+  photography: { local: 3.1, national: 2.3 },
+  catering: { local: 3.7, national: 2.6 },
+  "funeral services": { local: 4.5, national: 3.2 },
+
+  // Industrial
+  manufacturing: { local: 2.8, national: 2.5 },
+  construction: { local: 3.3, national: 2.4 },
+  logistics: { local: 2.7, national: 2.3 },
+
+  // E-commerce
+  fashion: { local: 2.6, national: 2.6 },
+  electronics: { local: 2.4, national: 2.4 },
+  supplements: { local: 3.0, national: 3.0 },
+
+  // Defaults
+  "default service": { local: 3.0, national: 2.0 },
+  "default product": { local: 2.5, national: 2.5 },
+};
+
+// Enhanced matching logic with plural/synonym support
+function getFallbackConversionRate(
+  businessType: string,
+  scope: "local" | "national"
+): number {
+  const cleanType = businessType
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, "") // Remove special chars
+    .replace(/(services|service|company|shop|store)$/g, "") // Remove common suffixes
+    .trim();
+
+  const industryMap: Record<string, string> = {
+    lawyer: "legal",
+    attorney: "legal",
+    dentist: "dental",
+    vet: "veterinary",
+    gym: "fitness",
+    barber: "hair salon",
+    tutor: "tutoring",
+    tech: "it support",
   };
 
-  const nationalConversionRates: Record<string, number> = {
-    roofing: 2.2,
-    plumbing: 1.8,
-    "home improvement": 1.5,
-    landscaping: 2.0,
-    electrician: 1.7,
-    hvac: 2.1,
-    dental: 3.2,
-    legal: 2.8,
-    automotive: 1.3,
-    default: 1.0,
-  };
+  // Check for direct matches first
+  const directMatch = Object.keys(FALLBACK_CONVERSION_RATES).find((key) =>
+    cleanType.includes(key)
+  );
 
-  const lowerBusinessType = businessType.toLowerCase();
-  const rates =
-    analysisScope === "local" ? localConversionRates : nationalConversionRates;
+  // Check for synonym matches
+  const synonymMatch = Object.entries(industryMap).find(([synonym]) =>
+    cleanType.includes(synonym)
+  );
 
-  // Check for exact match
-  if (rates[lowerBusinessType]) {
-    return rates[lowerBusinessType];
-  }
+  const matchedKey =
+    directMatch || (synonymMatch ? industryMap[synonymMatch[0]] : null);
 
-  // Check for partial match
-  for (const key of Object.keys(rates)) {
-    if (lowerBusinessType.includes(key)) {
-      return rates[key];
-    }
-  }
+  // Determine category type
+  const isProductBased = cleanType.match(/(product|goods|shop|store)/);
+  const defaultKey = isProductBased ? "default product" : "default service";
 
-  return rates.default;
+  const rates = matchedKey
+    ? FALLBACK_CONVERSION_RATES[matchedKey]
+    : FALLBACK_CONVERSION_RATES[defaultKey];
+
+  return scope === "local" ? rates.local : rates.national;
 }

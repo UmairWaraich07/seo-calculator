@@ -33,30 +33,3 @@ export async function POST(request: Request) {
     );
   }
 }
-
-/**
- const endDate = new Date();
-    const startDate = new Date();
-    startDate.setDate(endDate.getDate() - 30);
-
-    const formatDate = (date: Date) => date.toISOString().split("T")[0];
-
-    // Build API URL
-    const apiUrl = `https://keyword.searchatlas.com/api/v1/rank-tracker/${SEARCHATLAS_PROJECT_ID}/competitors-by-visibility/`;
-
-    // Make API call with Axios
-    const response = await axios.get(apiUrl, {
-      headers: {
-        "Content-Type": "application/json",
-      },
-      params: {
-        period2_start: formatDate(startDate),
-        period2_end: formatDate(endDate),
-        page: 1,
-        page_size: 3,
-        searchatlas_api_key: SEARCHATLAS_API_KEY,
-      },
-    });
-
-    console.log("SearchAtlas API response:", response.data);
- */
