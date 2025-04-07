@@ -152,6 +152,159 @@ export async function GET(request: Request) {
           width: auto;
           margin-right: 6px;
         }
+        #seo-calculator-widget .switch-container {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 16px;
+        }
+        #seo-calculator-widget .switch-label {
+          display: flex;
+          flex-direction: column;
+        }
+        #seo-calculator-widget .switch-label-title {
+          font-weight: 500;
+          margin-bottom: 4px;
+        }
+        #seo-calculator-widget .switch-label-description {
+          font-size: 0.875rem;
+          color: #64748b;
+        }
+        #seo-calculator-widget .switch-toggle {
+          display: flex;
+          align-items: center;
+        }
+        #seo-calculator-widget .switch-text {
+          font-size: 0.875rem;
+          margin: 0 8px;
+        }
+        #seo-calculator-widget .switch {
+          position: relative;
+          display: inline-block;
+          width: 44px;
+          height: 24px;
+        }
+        #seo-calculator-widget .switch input {
+          opacity: 0;
+          width: 0;
+          height: 0;
+        }
+        #seo-calculator-widget .slider {
+          position: absolute;
+          cursor: pointer;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background-color: #ccc;
+          transition: .4s;
+          border-radius: 24px;
+        }
+        #seo-calculator-widget .slider:before {
+          position: absolute;
+          content: "";
+          height: 18px;
+          width: 18px;
+          left: 3px;
+          bottom: 3px;
+          background-color: white;
+          transition: .4s;
+          border-radius: 50%;
+        }
+        #seo-calculator-widget input:checked + .slider {
+          background-color: #2563eb;
+        }
+        #seo-calculator-widget input:checked + .slider:before {
+          transform: translateX(20px);
+        }
+        #seo-calculator-widget .badge {
+          display: inline-flex;
+          align-items: center;
+          padding: 0.25rem 0.5rem;
+          font-size: 0.75rem;
+          font-weight: 600;
+          line-height: 1;
+          border-radius: 9999px;
+          margin-left: 0.5rem;
+        }
+        #seo-calculator-widget .badge-outline {
+          border: 1px solid #d1d5db;
+          color: #64748b;
+        }
+        #seo-calculator-widget .badge-primary {
+          background-color: #2563eb;
+          color: white;
+        }
+        #seo-calculator-widget .badge-secondary {
+          background-color: #6b7280;
+          color: white;
+        }
+        #seo-calculator-widget .icon {
+          display: inline-block;
+          width: 1em;
+          height: 1em;
+          margin-right: 0.25rem;
+        }
+        #seo-calculator-widget .tooltip {
+          position: relative;
+          display: inline-block;
+          cursor: help;
+        }
+        #seo-calculator-widget .tooltip-icon {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 18px;
+          height: 18px;
+          border-radius: 50%;
+          background-color: #e2e8f0;
+          color: #64748b;
+          font-size: 12px;
+          margin-left: 6px;
+        }
+        #seo-calculator-widget .tooltip-text {
+          visibility: hidden;
+          width: 200px;
+          background-color: #333;
+          color: #fff;
+          text-align: center;
+          border-radius: 6px;
+          padding: 8px;
+          position: absolute;
+          z-index: 1;
+          bottom: 125%;
+          left: 50%;
+          transform: translateX(-50%);
+          opacity: 0;
+          transition: opacity 0.3s;
+          font-size: 0.75rem;
+          font-weight: normal;
+        }
+        #seo-calculator-widget .tooltip:hover .tooltip-text {
+          visibility: visible;
+          opacity: 1;
+        }
+        #seo-calculator-widget .competitor-item {
+          border: 1px solid #e2e8f0;
+          border-radius: 6px;
+          padding: 12px;
+          margin-bottom: 12px;
+        }
+        #seo-calculator-widget .competitor-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          margin-bottom: 8px;
+        }
+        #seo-calculator-widget .competitor-name {
+          font-weight: 500;
+          margin: 0;
+        }
+        #seo-calculator-widget .competitor-url {
+          font-size: 0.875rem;
+          color: #64748b;
+          margin: 0;
+        }
       \`;
       document.head.appendChild(styles);
       
@@ -174,6 +327,7 @@ export async function GET(request: Request) {
           location: '',
           customerValue: '',
           competitorType: 'auto',
+          analysisScope: 'local',
           competitors: ['', '', '', '', ''],
           email: ''
         };
@@ -295,6 +449,32 @@ export async function GET(request: Request) {
                 />
               </div>
               
+              <div class="switch-container">
+                <div class="switch-label">
+                  <span class="switch-label-title">Analysis Scope</span>
+                  <span class="switch-label-description">Choose between local or national competitor analysis</span>
+                </div>
+                <div class="switch-toggle">
+                  <span class="switch-text" style="color: \${formData.analysisScope === 'local' ? '#2563eb' : '#64748b'}">Local</span>
+                  <label class="switch">
+                    <input 
+                      type="checkbox" 
+                      id="analysisScope" 
+                      \${formData.analysisScope === 'national' ? 'checked' : ''}
+                    />
+                    <span class="slider"></span>
+                  </label>
+                  <span class="switch-text" style="color: \${formData.analysisScope === 'national' ? '#2563eb' : '#64748b'}">National</span>
+                  <span class="tooltip">
+                    <span class="tooltip-icon">?</span>
+                    <span class="tooltip-text">
+                      <strong>Local:</strong> Analyzes competitors in your specific location using Google Maps data.<br>
+                      <strong>National:</strong> Analyzes top organic competitors nationwide using SearchAtlas data.
+                    </span>
+                  </span>
+                </div>
+              </div>
+              
               <div class="form-group">
                 <label>Competitor Selection</label>
                 <div class="radio-group">
@@ -306,7 +486,10 @@ export async function GET(request: Request) {
                       value="auto" 
                       \${formData.competitorType === 'auto' ? 'checked' : ''}
                     />
-                    <label for="competitorTypeAuto">Auto-detect competitors</label>
+                    <label for="competitorTypeAuto">
+                      Auto-detect competitors 
+                      \${formData.analysisScope === 'local' ? 'from Google Maps' : 'from SearchAtlas'}
+                    </label>
                   </div>
                   <div class="radio-option">
                     <input 
@@ -330,26 +513,78 @@ export async function GET(request: Request) {
         function renderCompetitorForm() {
           let competitorFields = '';
           
-          if (formData.competitorType === 'auto') {
+          if (formData.competitorType === 'auto' && !formData.competitors[0]) {
             competitorFields = \`
               <div class="loading">
                 <div class="spinner"></div>
-                <p>Detecting your top competitors...</p>
+                <p>
+                  \${formData.analysisScope === 'local' 
+                    ? \`Detecting local competitors in \${formData.location}...\` 
+                    : 'Detecting national competitors in your industry...'}
+                </p>
               </div>
             \`;
             
             // Simulate competitor detection
             setTimeout(() => {
-              formData.competitors = [
-                'https://competitor1.com',
-                'https://competitor2.com',
-                'https://competitor3.com',
-                'https://competitor4.com',
-                'https://competitor5.com'
-              ];
+              if (formData.analysisScope === 'local') {
+                // Simulate local competitors from Google Maps
+                formData.competitors = [
+                  \`https://www.\${formData.location.toLowerCase().replace(/\\s+/g, '')}\${formData.businessType.toLowerCase().replace(/\\s+/g, '')}pros.com\`,
+                  \`https://www.\${formData.businessType.toLowerCase().replace(/\\s+/g, '')}expertsof\${formData.location.toLowerCase().replace(/\\s+/g, '')}.com\`,
+                  \`https://www.\${formData.location.toLowerCase().replace(/\\s+/g, '')}\${formData.businessType.toLowerCase().replace(/\\s+/g, '')}services.com\`,
+                  \`https://www.best\${formData.businessType.toLowerCase().replace(/\\s+/g, '')}in\${formData.location.toLowerCase().replace(/\\s+/g, '')}.com\`,
+                  \`https://www.\${formData.location.toLowerCase().replace(/\\s+/g, '')}premier\${formData.businessType.toLowerCase().replace(/\\s+/g, '')}.com\`
+                ];
+              } else {
+                // Simulate national competitors from SearchAtlas
+                formData.competitors = [
+                  \`https://www.national\${formData.businessType.toLowerCase().replace(/\\s+/g, '')}.com\`,
+                  \`https://www.\${formData.businessType.toLowerCase().replace(/\\s+/g, '')}america.com\`,
+                  \`https://www.usa\${formData.businessType.toLowerCase().replace(/\\s+/g, '')}solutions.com\`,
+                  \`https://www.\${formData.businessType.toLowerCase().replace(/\\s+/g, '')}nationwide.com\`,
+                  \`https://www.premium\${formData.businessType.toLowerCase().replace(/\\s+/g, '')}services.com\`
+                ];
+              }
               renderWidget();
             }, 2000);
           } else {
+            // Show detected competitors or input fields
+            if (formData.competitorType === 'auto' && formData.competitors[0]) {
+              competitorFields += \`
+                <div style="margin-bottom: 16px;">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <h4 style="margin: 0; font-size: 0.875rem;">Detected Competitors</h4>
+                    <span class="badge \${formData.analysisScope === 'local' ? 'badge-primary' : 'badge-secondary'}">
+                      \${formData.analysisScope === 'local' 
+                        ? '<span class="icon">📍</span> Local' 
+                        : '<span class="icon">🌐</span> National'}
+                    </span>
+                  </div>
+              \`;
+              
+              for (let i = 0; i < formData.competitors.length; i++) {
+                if (formData.competitors[i]) {
+                  const competitorName = formData.competitors[i].replace(/^https?:\\/\\/(?:www\\.)?/, '').split('.')[0];
+                  competitorFields += \`
+                    <div class="competitor-item">
+                      <div class="competitor-header">
+                        <div>
+                          <p class="competitor-name">\${competitorName}</p>
+                          <p class="competitor-url">\${formData.competitors[i]}</p>
+                        </div>
+                        <span class="badge badge-outline">
+                          \${formData.analysisScope === 'local' ? 'Google Maps' : 'SearchAtlas'}
+                        </span>
+                      </div>
+                    </div>
+                  \`;
+                }
+              }
+              
+              competitorFields += '</div>';
+            }
+            
             for (let i = 0; i < 5; i++) {
               competitorFields += \`
                 <div class="form-group">
@@ -368,19 +603,22 @@ export async function GET(request: Request) {
           return \`
             <form id="competitor-form">
               <div class="form-group">
-                <h3>\${formData.competitorType === 'auto' ? 'Detected Competitors' : 'Enter Your Competitors'}</h3>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                  <h3 style="margin: 0;">\${formData.competitorType === 'auto' ? 'Detected Competitors' : 'Enter Your Competitors'}</h3>
+                  <span class="badge \${formData.analysisScope === 'local' ? 'badge-primary' : 'badge-secondary'}">
+                    \${formData.analysisScope === 'local' 
+                      ? '<span class="icon">📍</span> Local' 
+                      : '<span class="icon">🌐</span> National'}
+                  </span>
+                </div>
+                <p style="margin-top: 4px; font-size: 0.875rem; color: #64748b;">
+                  \${formData.analysisScope === 'local' 
+                    ? \`Based on your local market in \${formData.location}\`
+                    : 'Based on national organic search rankings'}
+                </p>
               </div>
               
               \${competitorFields}
-              
-              \${formData.competitorType === 'auto' && formData.competitors[0] ? \`
-                <div class="form-group">
-                  <p>We've detected the following competitors:</p>
-                  <ul>
-                    \${formData.competitors.map(comp => comp ? \`<li>\${comp}</li>\` : '').join('')}
-                  </ul>
-                </div>
-              \` : ''}
               
               \${formData.competitorType === 'auto' && !formData.competitors[0] ? '' : \`
                 <button type="submit">Continue</button>
@@ -408,13 +646,22 @@ export async function GET(request: Request) {
           
           return \`
             <div class="loading">
+              <div style="margin-bottom: 16px;">
+                <span class="badge \${formData.analysisScope === 'local' ? 'badge-primary' : 'badge-secondary'}">
+                  \${formData.analysisScope === 'local' 
+                    ? '<span class="icon">📍</span> Local Analysis' 
+                    : '<span class="icon">🌐</span> National Analysis'}
+                </span>
+              </div>
               <div class="spinner"></div>
               <p>\${getProcessingStatusMessage()}</p>
               <div class="progress-bar" style="width: 100%; margin-top: 20px;">
                 <div class="progress-bar-fill" style="width: \${processingProgress}%"></div>
               </div>
               <p style="font-size: 0.9rem; color: #64748b; margin-top: 16px;">
-                This may take a few minutes. We're analyzing your website and competitors to identify SEO opportunities.
+                \${formData.analysisScope === 'local'
+                  ? \`This may take a few minutes. We're analyzing your website and local competitors to identify SEO opportunities in your area.\`
+                  : \`This may take a few minutes. We're analyzing your website and national competitors to identify SEO opportunities across the country.\`}
               </p>
             </div>
           \`;
@@ -425,7 +672,9 @@ export async function GET(request: Request) {
           if (processingProgress < 25) {
             return "Analyzing your website...";
           } else if (processingProgress < 50) {
-            return "Gathering competitor data...";
+            return formData.analysisScope === 'local'
+              ? "Gathering local competitor data..."
+              : "Gathering national competitor data...";
           } else if (processingProgress < 75) {
             return "Collecting keyword rankings...";
           } else {
@@ -440,6 +689,13 @@ export async function GET(request: Request) {
               <div class="success-icon">✓</div>
               <h3>Your SEO Report is Ready!</h3>
               <p>Enter your email below to receive your detailed SEO opportunity report.</p>
+              <div style="margin: 16px 0;">
+                <span class="badge \${formData.analysisScope === 'local' ? 'badge-primary' : 'badge-secondary'}">
+                  \${formData.analysisScope === 'local' 
+                    ? '<span class="icon">📍</span> Local Analysis' 
+                    : '<span class="icon">🌐</span> National Analysis'}
+                </span>
+              </div>
             </div>
             
             <form id="email-form">
@@ -469,6 +725,26 @@ export async function GET(request: Request) {
             const form = document.getElementById('business-info-form');
             if (form) {
               form.addEventListener('submit', handleBusinessInfoSubmit);
+              
+              // Add analysis scope toggle event listener
+              const analysisScope = document.getElementById('analysisScope');
+              if (analysisScope) {
+                analysisScope.addEventListener('change', (e) => {
+                  formData.analysisScope = e.target.checked ? 'national' : 'local';
+                  // Update the competitor type label
+                  const competitorTypeAutoLabel = document.querySelector('label[for="competitorTypeAuto"]');
+                  if (competitorTypeAutoLabel) {
+                    competitorTypeAutoLabel.innerHTML = \`Auto-detect competitors \${formData.analysisScope === 'local' ? 'from Google Maps' : 'from SearchAtlas'}\`;
+                  }
+                  // Update the toggle text colors
+                  const localText = document.querySelector('.switch-toggle .switch-text:first-child');
+                  const nationalText = document.querySelector('.switch-toggle .switch-text:last-of-type');
+                  if (localText && nationalText) {
+                    localText.style.color = formData.analysisScope === 'local' ? '#2563eb' : '#64748b';
+                    nationalText.style.color = formData.analysisScope === 'national' ? '#2563eb' : '#64748b';
+                  }
+                });
+              }
               
               // Add radio button event listeners
               const radioAuto = document.getElementById('competitorTypeAuto');
@@ -504,6 +780,9 @@ export async function GET(request: Request) {
           formData.businessType = document.getElementById('businessType').value;
           formData.location = document.getElementById('location').value;
           formData.customerValue = document.getElementById('customerValue').value;
+          
+          // Reset competitors array if switching analysis scope
+          formData.competitors = ['', '', '', '', ''];
           
           // Move to next step
           currentStep = 2;
@@ -566,8 +845,15 @@ export async function GET(request: Request) {
                     <div class="success-icon">✓</div>
                     <h3>Your SEO Report Has Been Sent!</h3>
                     <p>Please check your email inbox for your detailed SEO opportunity report.</p>
+                    <div style="margin: 16px 0;">
+                      <span class="badge \${formData.analysisScope === 'local' ? 'badge-primary' : 'badge-secondary'}">
+                        \${formData.analysisScope === 'local' 
+                          ? '<span class="icon">📍</span> Local Analysis' 
+                          : '<span class="icon">🌐</span> National Analysis'}
+                      </span>
+                    </div>
                     <p style="margin-top: 20px;">Want to discuss your SEO opportunities with an expert?</p>
-                    <button onclick="window.open('\${config.baseUrl}/schedule-call?ref=widget&agency=\${config.agencyId}', '_blank')">
+                    <button onclick="window.open('\${config.baseUrl}/schedule-call?ref=widget&agency=\${config.agencyId}&scope=\${formData.analysisScope}', '_blank')">
                       Schedule a Free Consultation
                     </button>
                   </div>

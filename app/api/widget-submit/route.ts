@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
-import { connectToDatabase } from "@/lib/mongodb";
+import { connectToMongoose, Report, WidgetLead } from "@/lib/mongodb";
 import { sendReportEmail } from "@/lib/email";
+import { generateKeywords } from "@/lib/keywords";
+import { fetchKeywordData } from "@/lib/dataseo";
+import { calculateSeoOpportunity } from "@/lib/report-generator";
 
 export async function POST(request: Request) {
   try {
@@ -11,13 +14,10 @@ export async function POST(request: Request) {
     }
 
     // Connect to MongoDB
-    const { db } = await connectToDatabase();
-
-    // In a real implementation, we would process the data and generate a report
-    // For now, we'll just save the lead and simulate sending an email
+    await connectToMongoose();
 
     // Save the lead to database
-    const leadId = await db.collection("widget_leads").insertOne({
+    const widgetLead = new WidgetLead({
       agencyId,
       formData,
       reportId,
@@ -26,74 +26,73 @@ export async function POST(request: Request) {
       status: "new",
     });
 
-    // In a real implementation, we would generate a report here
-    // For now, we'll create a mock report
-    const mockReport = {
+    await widgetLead.save();
+
+    // Generate keywords based on business type and location
+    const keywords = await generateKeywords(
+      formData.businessType,
+      formData.location,
+      formData.analysisScope
+    );
+
+    // Fetch keyword data from DataForSEO API
+    const keywordData = await fetchKeywordData(
+      formData.businessUrl,
+      formData.competitors.filter(Boolean), // Filter out empty strings
+      keywords,
+      formData.analysisScope,
+      formData.location
+    );
+
+    // Calculate potential traffic and revenue
+    const reportData = await calculateSeoOpportunity(
+      keywordData,
+      Number.parseFloat(formData.customerValue),
+      formData.businessType,
+      formData.analysisScope
+    );
+
+    // Create the full report object
+    const fullReport = {
       basicInfo: {
         businessUrl: formData.businessUrl,
         businessType: formData.businessType,
         location: formData.location,
         customerValue: Number.parseFloat(formData.customerValue),
+        analysisScope: formData.analysisScope,
+        competitorType: formData.competitorType,
       },
-      report: {
-        totalSearchVolume: 3201,
-        potentialTraffic: 960,
-        conversionRate: 3.2,
-        potentialCustomers: 32,
-        potentialRevenue: Number.parseFloat(formData.customerValue) * 32,
-        currentRankings: {
-          top3: 5,
-          top10: 12,
-          top50: 28,
-          top100: 35,
-          total: 50,
-        },
-        competitorRankings: [
-          {
-            name: "Competitor 1",
-            url: formData.competitors[0] || "https://competitor1.com",
-            top3: 8,
-            top10: 15,
-            top50: 32,
-            top100: 42,
-          },
-          {
-            name: "Competitor 2",
-            url: formData.competitors[1] || "https://competitor2.com",
-            top3: 6,
-            top10: 14,
-            top50: 30,
-            top100: 38,
-          },
-        ],
-        keywordData: Array.from({ length: 50 }, (_, i) => ({
-          keyword: `${formData.businessType} ${
-            i % 2 === 0 ? formData.location : "services"
-          } ${i + 1}`,
-          searchVolume: Math.floor(Math.random() * 500) + 50,
-          clientRank:
-            Math.random() > 0.3
-              ? Math.floor(Math.random() * 100) + 1
-              : "Not ranked",
-          competitorRanks: {},
-        })),
-      },
+      report: reportData,
     };
 
-    // Send email with mock report
+    // Save report to database
+    const newReport = new Report({
+      basicInfo: fullReport.basicInfo,
+      competitorInfo: { competitors: formData.competitors.filter(Boolean) },
+      keywords,
+      keywordData,
+      report: reportData,
+      createdAt: new Date(),
+      emailSent: false,
+      source: "widget",
+      agencyId,
+      referrer,
+    });
+
+    await newReport.save();
+
+    // Send email with report
     try {
-      await sendReportEmail(formData.email, mockReport);
+      const emailResult = await sendReportEmail(formData.email, {
+        basicInfo: fullReport.basicInfo,
+        report: reportData,
+      });
 
       // Update lead status in database
-      await db.collection("widget_leads").updateOne(
-        { _id: leadId.insertedId },
-        {
-          $set: {
-            status: "email_sent",
-            emailSentAt: new Date(),
-          },
-        }
-      );
+      widgetLead.status = "email_sent";
+      widgetLead.emailSentAt = new Date();
+      widgetLead.emailId = emailResult?.id;
+      await widgetLead.save();
 
       return NextResponse.json({
         success: true,
@@ -103,15 +102,9 @@ export async function POST(request: Request) {
       console.error("Error sending email:", emailError);
 
       // Update lead status in database
-      await db.collection("widget_leads").updateOne(
-        { _id: leadId.insertedId },
-        {
-          $set: {
-            status: "email_failed",
-            emailError: emailError.message,
-          },
-        }
-      );
+      widgetLead.status = "email_failed";
+      widgetLead.emailError = emailError.message;
+      await widgetLead.save();
 
       return NextResponse.json(
         {

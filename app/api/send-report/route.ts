@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { connectToDatabase } from "@/lib/mongodb";
-import { ObjectId } from "mongodb";
+import { connectToMongoose, Report } from "@/lib/mongodb";
 import { sendReportEmail } from "@/lib/email";
 
 export async function POST(request: Request) {
@@ -15,12 +14,10 @@ export async function POST(request: Request) {
     }
 
     // Connect to MongoDB
-    const { db } = await connectToDatabase();
+    await connectToMongoose();
 
     // Fetch report from database
-    const report = await db.collection("reports").findOne({
-      _id: new ObjectId(reportId),
-    });
+    const report = await Report.findById(reportId);
 
     if (!report) {
       return NextResponse.json({ error: "Report not found" }, { status: 404 });
@@ -31,17 +28,11 @@ export async function POST(request: Request) {
       const emailResult = await sendReportEmail(email, report);
 
       // Update report in database
-      await db.collection("reports").updateOne(
-        { _id: new ObjectId(reportId) },
-        {
-          $set: {
-            emailSent: true,
-            emailAddress: email,
-            emailSentAt: new Date(),
-            emailId: emailResult?.id,
-          },
-        }
-      );
+      report.emailSent = true;
+      report.emailAddress = email;
+      report.emailSentAt = new Date();
+      report.emailId = emailResult?.id;
+      await report.save();
 
       return NextResponse.json({
         success: true,

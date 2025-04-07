@@ -1,37 +1,76 @@
 import { NextResponse } from "next/server";
-import { connectToDatabase } from "@/lib/mongodb";
+import { connectToMongoose, Report } from "@/lib/mongodb";
 import { generateKeywords } from "@/lib/keywords";
-import { fetchKeywordData } from "@/lib/search-atlas";
+import { fetchKeywordData } from "@/lib/dataseo";
+import { calculateSeoOpportunity } from "@/lib/report-generator";
+import { updateProgress } from "./process-progress/route";
 
 export async function POST(request: Request) {
   try {
-    const { basicInfo, competitorInfo } = await request.json();
+    const { basicInfo, competitorInfo, sessionId } = await request.json();
+
+    if (!basicInfo || !basicInfo.businessUrl) {
+      return NextResponse.json(
+        { error: "Business URL is required" },
+        { status: 400 }
+      );
+    }
+
+    // Update progress: Initializing
+    updateProgress(sessionId, "initializing", 0);
 
     // Connect to MongoDB
-    const { db } = await connectToDatabase();
+    await connectToMongoose();
+
+    // Update progress: Analyzing website
+    updateProgress(sessionId, "analyzing_website", 5);
 
     // Generate keywords based on business type and location
     const keywords = await generateKeywords(
       basicInfo.businessType,
+      basicInfo.location,
+      basicInfo.analysisScope
+    );
+
+    // Update progress: Gathering competitor data
+    updateProgress(sessionId, "gathering_competitor_data", 20);
+
+    // Fetch keyword data from DataForSEO API
+    const keywordData = await fetchKeywordData(
+      basicInfo.businessUrl,
+      competitorInfo.competitors.filter(Boolean), // Filter out empty strings
+      keywords,
+      basicInfo.analysisScope,
       basicInfo.location
     );
 
-    // Fetch keyword data from SearchAtlas API
-    const keywordData = await fetchKeywordData(
-      basicInfo.businessUrl,
-      competitorInfo.competitors,
-      keywords
-    );
+    // Update progress: Collecting keyword rankings
+    updateProgress(sessionId, "collecting_keyword_rankings", 40);
+
+    // Small delay to show progress
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+
+    // Update progress: Analyzing search volume
+    updateProgress(sessionId, "analyzing_search_volume", 60);
 
     // Calculate potential traffic and revenue
+    console.log("Starting Calculating potential traffic and revenue");
+
+    // Update progress: Calculating opportunities
+    updateProgress(sessionId, "calculating_opportunities", 80);
+
     const report = await calculateSeoOpportunity(
       keywordData,
       basicInfo.customerValue,
-      basicInfo.businessType
+      basicInfo.businessType,
+      basicInfo.analysisScope
     );
 
-    // Save report to database
-    const result = await db.collection("reports").insertOne({
+    // Update progress: Finalizing report
+    updateProgress(sessionId, "finalizing_report", 95);
+
+    // Create a new report document
+    const newReport = {
       basicInfo,
       competitorInfo,
       keywords,
@@ -39,117 +78,71 @@ export async function POST(request: Request) {
       report,
       createdAt: new Date(),
       emailSent: false,
-    });
+    };
+
+    // Save report to database using Mongoose
+    const reportDoc = new Report(newReport);
+
+    try {
+      await reportDoc.save();
+    } catch (saveError) {
+      console.error("Error saving report to database:", saveError);
+      // Try to save with a workaround for the competitorRanks issue
+      try {
+        // Convert keywordData.keywordData.competitorRanks to string and back to object
+        const fixedKeywordData = {
+          ...keywordData,
+          keywordData: keywordData.keywordData.map((kw: any) => ({
+            ...kw,
+            competitorRanks: JSON.parse(JSON.stringify(kw.competitorRanks)),
+          })),
+        };
+
+        // Convert report.keywordData.competitorRanks to string and back to object
+        const fixedReport = {
+          ...report,
+          keywordData: report.keywordData.map((kw: any) => ({
+            ...kw,
+            competitorRanks: JSON.parse(JSON.stringify(kw.competitorRanks)),
+          })),
+        };
+
+        const fixedReportDoc = new Report({
+          ...newReport,
+          keywordData: fixedKeywordData,
+          report: fixedReport,
+        });
+
+        await fixedReportDoc.save();
+
+        // Update progress: Complete
+        updateProgress(sessionId, "complete", 100);
+
+        return NextResponse.json({
+          success: true,
+          reportId: fixedReportDoc._id.toString(),
+        });
+      } catch (fixedSaveError) {
+        console.error("Error saving fixed report to database:", fixedSaveError);
+        throw fixedSaveError;
+      }
+    }
+
+    // Update progress: Complete
+    updateProgress(sessionId, "complete", 100);
 
     return NextResponse.json({
       success: true,
-      reportId: result.insertedId.toString(),
+      reportId: reportDoc._id.toString(),
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error processing SEO data:", error);
     return NextResponse.json(
-      { error: "Failed to process SEO data" },
+      {
+        error: "Failed to process SEO data",
+        details: error.message,
+      },
       { status: 500 }
     );
   }
-}
-
-async function calculateSeoOpportunity(
-  keywordDataObj: any,
-  customerValue: number,
-  businessType: string
-) {
-  // Extract the actual keyword data array from the object
-  const keywordData = keywordDataObj.keywordData || [];
-  const competitors = keywordDataObj.competitors || [];
-
-  // Get average conversion rate for the industry
-  const conversionRate = await getIndustryConversionRate(businessType);
-
-  // Calculate potential traffic and revenue
-  const totalSearchVolume = keywordData.reduce(
-    (sum: number, kw: any) => sum + kw.searchVolume,
-    0
-  );
-  const potentialTraffic = totalSearchVolume * 0.3; // Assuming 30% CTR for #1 position
-  const potentialCustomers = Math.floor(
-    potentialTraffic * (conversionRate / 100)
-  );
-  const potentialRevenue = potentialCustomers * customerValue;
-
-  // Calculate current rankings
-  const currentRankings = {
-    top3: 0,
-    top10: 0,
-    top50: 0,
-    top100: 0,
-    total: keywordData.length,
-  };
-
-  keywordData.forEach((kw: any) => {
-    const rank = kw.clientRank || 101;
-    if (rank <= 3) currentRankings.top3++;
-    if (rank <= 10) currentRankings.top10++;
-    if (rank <= 50) currentRankings.top50++;
-    if (rank <= 100) currentRankings.top100++;
-  });
-
-  // Calculate competitor rankings
-  const competitorRankings = competitors.map((competitor: any) => {
-    const rankings = {
-      name: competitor.name,
-      url: competitor.url,
-      top3: 0,
-      top10: 0,
-      top50: 0,
-      top100: 0,
-    };
-
-    keywordData.forEach((kw: any) => {
-      const rank = kw.competitorRanks[competitor.url] || 101;
-      if (rank <= 3) rankings.top3++;
-      if (rank <= 10) rankings.top10++;
-      if (rank <= 50) rankings.top50++;
-      if (rank <= 100) rankings.top100++;
-    });
-
-    return rankings;
-  });
-
-  return {
-    totalSearchVolume,
-    potentialTraffic,
-    conversionRate,
-    potentialCustomers,
-    potentialRevenue,
-    currentRankings,
-    competitorRankings,
-    keywordData: keywordData.map((kw: any) => ({
-      keyword: kw.keyword,
-      searchVolume: kw.searchVolume,
-      clientRank: kw.clientRank || "Not ranked",
-      competitorRanks: kw.competitorRanks,
-    })),
-  };
-}
-
-async function getIndustryConversionRate(
-  businessType: string
-): Promise<number> {
-  // This would be replaced with an actual API call or database lookup
-  // For now, we'll return some sample data based on business type
-  const conversionRates: Record<string, number> = {
-    roofing: 3.2,
-    plumbing: 2.8,
-    "home improvement": 2.5,
-    landscaping: 3.0,
-    electrician: 2.7,
-    hvac: 3.1,
-    dental: 4.2,
-    legal: 3.8,
-    automotive: 2.3,
-    default: 2.0,
-  };
-
-  return conversionRates[businessType.toLowerCase()] || conversionRates.default;
 }

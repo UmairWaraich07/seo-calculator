@@ -20,6 +20,7 @@ const nextConfig = {
     webpackBuildWorker: true,
     parallelServerBuildTraces: true,
     parallelServerCompiles: true,
+    serverComponentsExternalPackages: ["mongoose", "mongodb"],
   },
   env: {
     NEXT_PUBLIC_APP_URL: process.env.VERCEL_URL

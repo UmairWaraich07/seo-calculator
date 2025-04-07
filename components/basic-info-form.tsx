@@ -14,14 +14,23 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import { Switch } from "@/components/ui/switch";
+import { HelpCircle } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import type { BasicInfo } from "./calculator";
 
 const formSchema = z.object({
   businessUrl: z.string().url("Please enter a valid URL"),
   businessType: z.string().min(2, "Please enter your business type"),
   location: z.string().min(2, "Please enter your location"),
-  customerValue: z.string().min(1, "Please enter your average sale value"),
+  customerValue: z.coerce.number().positive("Please enter a positive value"),
   competitorType: z.enum(["manual", "auto"]),
+  analysisScope: z.enum(["local", "national"]),
 });
 
 interface BasicInfoFormProps {
@@ -35,8 +44,9 @@ export const BasicInfoForm = ({ onSubmit }: BasicInfoFormProps) => {
       businessUrl: "",
       businessType: "",
       location: "",
-      customerValue: "",
+      customerValue: 0,
       competitorType: "auto",
+      analysisScope: "local",
     },
   });
 
@@ -100,14 +110,78 @@ export const BasicInfoForm = ({ onSubmit }: BasicInfoFormProps) => {
               <FormItem>
                 <FormLabel>Average Customer Value ($)</FormLabel>
                 <FormControl>
-                  <Input
-                    type="number"
-                    placeholder="e.g., 5000"
-                    min={"1"}
-                    {...field}
-                  />
+                  <Input type="number" placeholder="e.g., 5000" {...field} />
                 </FormControl>
                 <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="analysisScope"
+            render={({ field }) => (
+              <FormItem className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <FormLabel>Analysis Scope</FormLabel>
+                    <div className="text-sm text-muted-foreground">
+                      Choose between local or national competitor analysis
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <span
+                      className={`text-sm ${
+                        field.value === "local"
+                          ? "font-medium text-primary"
+                          : "text-muted-foreground"
+                      }`}
+                    >
+                      Local
+                    </span>
+                    <FormControl>
+                      <Switch
+                        checked={field.value === "national"}
+                        onCheckedChange={(checked) => {
+                          field.onChange(checked ? "national" : "local");
+                        }}
+                      />
+                    </FormControl>
+                    <span
+                      className={`text-sm ${
+                        field.value === "national"
+                          ? "font-medium text-primary"
+                          : "text-muted-foreground"
+                      }`}
+                    >
+                      National
+                    </span>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 rounded-full"
+                          >
+                            <HelpCircle className="h-4 w-4" />
+                            <span className="sr-only">Analysis scope info</span>
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs">
+                          <p>
+                            <strong>Local:</strong> Analyzes competitors in your
+                            specific location using Google Maps data.
+                          </p>
+                          <p className="mt-1">
+                            <strong>National:</strong> Analyzes top organic
+                            competitors nationwide using DataForSEO data.
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
+                </div>
               </FormItem>
             )}
           />
@@ -127,7 +201,10 @@ export const BasicInfoForm = ({ onSubmit }: BasicInfoFormProps) => {
                     <div className="flex items-center space-x-2">
                       <RadioGroupItem value="auto" id="auto" />
                       <Label htmlFor="auto">
-                        Auto-detect competitors from Google
+                        Auto-detect competitors
+                        {form.watch("analysisScope") === "local"
+                          ? " from Google Maps"
+                          : " from DataForSEO"}
                       </Label>
                     </div>
                     <div className="flex items-center space-x-2">

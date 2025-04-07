@@ -20,6 +20,8 @@ export function ReportEmailTemplate({
     currentRankings,
     competitorRankings,
     keywordData,
+    analysisScope,
+    analysisInsights,
   } = report;
 
   // Generate keyword table rows
@@ -28,7 +30,11 @@ export function ReportEmailTemplate({
     .map(
       (kw: any) => `
       <tr>
-        <td style="padding: 8px; border: 1px solid #ddd;">${kw.keyword}</td>
+        <td style="padding: 8px; border: 1px solid #ddd;">${kw.keyword} ${
+        kw.isLocal
+          ? '<span style="font-size: 10px; background-color: #e2e8f0; border-radius: 9999px; padding: 2px 6px; margin-left: 4px;">Local</span>'
+          : ""
+      }</td>
         <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${kw.searchVolume.toLocaleString()}</td>
         <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${
           kw.clientRank
@@ -43,7 +49,7 @@ export function ReportEmailTemplate({
     .map(
       (competitor: any) => `
       <tr>
-        <td style="padding: 8px; border: 1px solid #ddd;">${competitor.name}</td>
+        <td style="padding: 8px; border: 1px solid #ddd;">${competitor.name} <span style="font-size: 10px; color: #64748b;">(${competitor.source})</span></td>
         <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${competitor.top3}</td>
         <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${competitor.top10}</td>
         <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${competitor.top50}</td>
@@ -51,6 +57,36 @@ export function ReportEmailTemplate({
       </tr>
     `
     )
+    .join("");
+
+  // Generate analysis-specific insights
+  const analysisSpecificInsights =
+    analysisScope === "local"
+      ? `
+      <div style="margin-top: 30px; background-color: #f0f9ff; padding: 20px; border-radius: 5px; border-left: 4px solid #0ea5e9;">
+        <h3 style="color: #0369a1; margin-top: 0;">Local SEO Insights</h3>
+        <ul style="margin-bottom: 0;">
+          <li>Google Maps Ranking Factor: <strong>${analysisInsights.googleMapsRankingFactor}</strong></li>
+          <li>Local Pack Opportunities: <strong>${analysisInsights.localPackOpportunities}</strong></li>
+          <li>"Near Me" Searches: <strong>${analysisInsights.nearMeSearches}</strong></li>
+          <li>Local Competitor Strength: <strong>${analysisInsights.localCompetitorStrength}</strong></li>
+        </ul>
+      </div>
+    `
+      : `
+      <div style="margin-top: 30px; background-color: #f0f7ff; padding: 20px; border-radius: 5px; border-left: 4px solid #3b82f6;">
+        <h3 style="color: #1d4ed8; margin-top: 0;">National SEO Insights</h3>
+        <ul style="margin-bottom: 0;">
+          <li>Competitive Difficulty: <strong>${analysisInsights.competitiveDifficulty}</strong></li>
+          <li>Content Gap Opportunities: <strong>${analysisInsights.contentGaps}</strong></li>
+          <li>Backlink Opportunities: <strong>${analysisInsights.backlinkOpportunities}</strong></li>
+        </ul>
+      </div>
+    `;
+
+  // Generate recommended actions
+  const recommendedActions = analysisInsights.recommendedActions
+    .map((action: string) => `<li>${action}</li>`)
     .join("");
 
   return `
@@ -169,6 +205,22 @@ export function ReportEmailTemplate({
           font-size: 12px; 
           color: #64748b; 
         }
+        .badge {
+          display: inline-block;
+          padding: 4px 8px;
+          font-size: 12px;
+          font-weight: 600;
+          line-height: 1;
+          border-radius: 9999px;
+          margin-left: 8px;
+          color: white;
+        }
+        .badge-local {
+          background-color: #2563eb;
+        }
+        .badge-national {
+          background-color: #6b7280;
+        }
         @media only screen and (max-width: 600px) {
           .stat-box {
             width: 46%;
@@ -185,18 +237,33 @@ export function ReportEmailTemplate({
           <p style="margin-top: 0; color: #64748b;">Prepared for ${
             basicInfo.businessUrl
           }</p>
+          <div style="margin-top: 10px;">
+            <span class="badge badge-${
+              analysisScope === "local" ? "local" : "national"
+            }">
+              ${
+                analysisScope === "local"
+                  ? "Local Analysis"
+                  : "National Analysis"
+              }
+            </span>
+          </div>
         </div>
         
         <div class="section">
           <h2 style="color: #1e3a8a; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px;">Executive Summary</h2>
           <div class="highlight">
-            <p>There are currently <strong>${totalSearchVolume.toLocaleString()}</strong> searches per month in your area for keywords that could drive your business. If you captured that traffic and converted even <strong>${conversionRate}%</strong>, that would be <strong>${potentialCustomers}</strong> new customers every month.</p>
+            <p>There are currently <strong>${totalSearchVolume.toLocaleString()}</strong> searches per month ${
+    analysisScope === "local" ? `in ${basicInfo.location}` : "nationwide"
+  } for keywords that could drive your business. If you captured that traffic and converted even <strong>${conversionRate}%</strong>, that would be <strong>${potentialCustomers}</strong> new customers every month.</p>
             <p>Based on your average customer value of <strong>${formatCurrency(
               basicInfo.customerValue
             )}</strong>, that means SEO could drive you <strong>${formatCurrency(
     potentialRevenue
   )}</strong> additional revenue per month if you were ranked #1 for all keyword terms below.</p>
           </div>
+          
+          ${analysisSpecificInsights}
         </div>
         
         <div class="section">
@@ -229,7 +296,9 @@ export function ReportEmailTemplate({
         
         <div class="section">
           <h2 style="color: #1e3a8a; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px;">Competitor Comparison</h2>
-          <p>See how your rankings compare to your competitors:</p>
+          <p>See how your rankings compare to your ${
+            analysisScope === "local" ? "local" : "national"
+          } competitors:</p>
           
           <table>
             <thead>
@@ -267,13 +336,24 @@ export function ReportEmailTemplate({
           <p>If you ranked #1 for all these keywords, you could receive approximately <strong>${potentialTraffic.toLocaleString()}</strong> visitors per month.</p>
           
           <div class="highlight">
-            <p>With an industry average conversion rate of <strong>${conversionRate}%</strong>, this traffic could generate <strong>${potentialCustomers}</strong> new customers per month.</p>
+            <p>With an ${
+              analysisScope === "local" ? "local" : "industry"
+            } average conversion rate of <strong>${conversionRate}%</strong>, this traffic could generate <strong>${potentialCustomers}</strong> new customers per month.</p>
             <p>At your average customer value of <strong>${formatCurrency(
               basicInfo.customerValue
             )}</strong>, this represents a potential monthly revenue of <strong>${formatCurrency(
     potentialRevenue
   )}</strong>.</p>
           </div>
+        </div>
+        
+        <div class="section">
+          <h2 style="color: #1e3a8a; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px;">Recommended Actions</h2>
+          <p>Based on our ${analysisScope} analysis, here are our top recommendations:</p>
+          
+          <ul style="margin-bottom: 20px;">
+            ${recommendedActions}
+          </ul>
         </div>
         
         <div class="section">

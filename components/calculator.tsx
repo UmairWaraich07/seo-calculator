@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { BasicInfoForm } from "@/components/basic-info-form";
@@ -8,6 +8,8 @@ import { CompetitorForm } from "@/components/competitor-form";
 import { EmailForm } from "@/components/email-form";
 import { ProcessingScreen } from "@/components/processing-screen";
 import { Progress } from "@/components/ui/progress";
+import { toast } from "@/components/ui/use-toast";
+import { v4 as uuidv4 } from "uuid";
 
 type CalculatorStep = "basic-info" | "competitors" | "processing" | "email";
 
@@ -15,8 +17,9 @@ export type BasicInfo = {
   businessUrl: string;
   businessType: string;
   location: string;
-  customerValue: string;
+  customerValue: number;
   competitorType: "manual" | "auto";
+  analysisScope: "local" | "national";
 };
 
 export type CompetitorInfo = {
@@ -30,14 +33,23 @@ export const Calculator = () => {
     businessUrl: "",
     businessType: "",
     location: "",
-    customerValue: "",
+    customerValue: 0,
     competitorType: "auto",
+    analysisScope: "local",
   });
   const [competitorInfo, setCompetitorInfo] = useState<CompetitorInfo>({
     competitors: ["", "", ""],
   });
   const [reportId, setReportId] = useState<string>("");
   const [progress, setProgress] = useState(0);
+  const [processingStage, setProcessingStage] =
+    useState<string>("initializing");
+  const [sessionId, setSessionId] = useState<string>("");
+
+  // Generate a unique session ID when the component mounts
+  useEffect(() => {
+    setSessionId(uuidv4());
+  }, []);
 
   const handleBasicInfoSubmit = async (data: BasicInfo) => {
     setBasicInfo(data);
@@ -47,6 +59,33 @@ export const Calculator = () => {
   const handleCompetitorSubmit = async (data: CompetitorInfo) => {
     setCompetitorInfo(data);
     setCurrentStep("processing");
+    setProgress(0);
+    setProcessingStage("initializing");
+
+    // Connect to the progress stream
+    const eventSource = new EventSource(
+      `/api/process-progress?sessionId=${sessionId}`
+    );
+
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        setProcessingStage(data.stage);
+        setProgress(data.progress);
+
+        // When processing is complete, close the connection
+        if (data.stage === "complete") {
+          eventSource.close();
+        }
+      } catch (error) {
+        console.error("Error parsing progress update:", error);
+      }
+    };
+
+    eventSource.onerror = () => {
+      console.error("EventSource failed");
+      eventSource.close();
+    };
 
     // Start the processing
     try {
@@ -58,38 +97,46 @@ export const Calculator = () => {
         body: JSON.stringify({
           basicInfo,
           competitorInfo: data,
+          sessionId, // Pass the session ID to link progress updates
         }),
       });
 
-      console.log("Processing response:", response);
-
       if (!response.ok) {
-        throw new Error("Failed to process SEO data");
+        const errorData = await response.json();
+        throw new Error(errorData.details || "Failed to process SEO data");
       }
 
       const result = await response.json();
       setReportId(result.reportId);
 
-      // Simulate progress updates
-      const interval = setInterval(() => {
-        setProgress((prev) => {
-          if (prev >= 95) {
-            clearInterval(interval);
-            setCurrentStep("email");
-            return 100;
-          }
-          return prev + 5;
-        });
-      }, 3000);
+      // Move to email step (the progress stream will update the UI)
+      // The eventSource will be closed when progress reaches 100%
     } catch (error) {
       console.error("Error processing SEO data:", error);
-      // Handle error state
+      toast({
+        title: "Error",
+        description:
+          (error as Error).message ||
+          "An error occurred while processing your data. Please try again.",
+        variant: "destructive",
+      });
+      // Reset to competitor step
+      setCurrentStep("competitors");
+      // Close the event source
+      eventSource.close();
     }
   };
 
+  // When progress reaches 100%, move to the email step
+  useEffect(() => {
+    if (progress === 100 && currentStep === "processing") {
+      setCurrentStep("email");
+    }
+  }, [progress, currentStep]);
+
   const handleEmailSubmit = async (email: string) => {
     try {
-      await fetch("/api/send-report", {
+      const response = await fetch("/api/send-report", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -100,11 +147,22 @@ export const Calculator = () => {
         }),
       });
 
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.details || "Failed to send report");
+      }
+
       // Redirect to thank you page
       router.push(`/thank-you?reportId=${reportId}`);
     } catch (error) {
       console.error("Error sending report:", error);
-      // Handle error state
+      toast({
+        title: "Error",
+        description:
+          (error as Error).message ||
+          "An error occurred while sending your report. Please try again.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -140,7 +198,7 @@ export const Calculator = () => {
               : currentStep === "competitors"
               ? 50
               : currentStep === "processing"
-              ? progress
+              ? 50 + progress / 2
               : 100
           }
           className="h-2"
@@ -155,11 +213,20 @@ export const Calculator = () => {
         <CompetitorForm
           onSubmit={handleCompetitorSubmit}
           competitorType={basicInfo.competitorType}
+          analysisScope={basicInfo.analysisScope}
+          businessType={basicInfo.businessType}
+          location={basicInfo.location}
           initialValues={competitorInfo}
         />
       )}
 
-      {currentStep === "processing" && <ProcessingScreen progress={progress} />}
+      {currentStep === "processing" && (
+        <ProcessingScreen
+          progress={progress}
+          analysisScope={basicInfo.analysisScope}
+          stage={processingStage}
+        />
+      )}
 
       {currentStep === "email" && <EmailForm onSubmit={handleEmailSubmit} />}
     </Card>

@@ -1,139 +1,131 @@
-// This file would contain functions to generate relevant keywords
-// based on business type and location
+import OpenAI from "openai";
 
-export async function generateKeywords(businessType: string, location: string) {
-  // In a real implementation, this would use AI or a keyword API
-  // For now, we'll generate some sample keywords
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY!,
+});
 
-  const baseKeywords = getBaseKeywords(businessType)
-  const locationKeywords = getLocationVariants(location)
+type AnalysisScope = "local" | "national";
 
-  const keywords = []
+export async function generateKeywords(
+  businessType: string,
+  location: string,
+  analysisScope: AnalysisScope = "local"
+): Promise<string[]> {
+  try {
+    // Generate location variants including surrounding areas (only for local)
+    const locationVariants =
+      analysisScope === "local"
+        ? await generateLocalLocationVariants(location)
+        : [];
 
-  // Combine base keywords with location variants
-  for (const base of baseKeywords) {
-    for (const loc of locationKeywords) {
-      keywords.push(`${base} ${loc}`)
+    // Generate base keywords using AI
+    const baseKeywords = await generateAIBasedKeywords(
+      businessType,
+      location,
+      analysisScope
+    );
+
+    // Generate location patterns only if we have valid location variants
+    const locationPatterns =
+      locationVariants.length > 0
+        ? createLocationPatterns(businessType, locationVariants)
+        : [];
+
+    // Combine and deduplicate keywords
+    return Array.from(new Set([...baseKeywords, ...locationPatterns])).slice(
+      0,
+      50
+    );
+  } catch (error) {
+    console.error("Keyword generation failed:", error);
+    return [];
+  }
+}
+
+async function generateLocalLocationVariants(
+  location: string
+): Promise<string[]> {
+  try {
+    const prompt = `Generate 15-20 neighboring cities/areas for ${location} in comma-separated format.
+      Example for Chicago: Chicago Heights, Lockport, Riverside, Oak Park, Evanston...`;
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.5,
+      max_tokens: 200,
+    });
+
+    const content = response.choices[0]?.message?.content;
+    return content ? parseLocationVariants(content) : [];
+  } catch (error) {
+    console.error("Location variant generation failed:", error);
+    return [];
+  }
+}
+
+function parseLocationVariants(rawText: string): string[] {
+  return rawText
+    .split(",")
+    .map((l) => l.trim().replace(/\.$/, ""))
+    .filter((l) => l.length > 0);
+}
+
+async function generateAIBasedKeywords(
+  businessType: string,
+  location: string,
+  scope: AnalysisScope
+): Promise<string[]> {
+  try {
+    const prompt = `Generate 30-40 ${scope} SEO keywords for ${businessType}.
+      ${scope === "local" ? `Location: ${location}` : "National scope"}
+      Include: service terms, location modifiers, buyer intent phrases
+      Format: comma-separated`;
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.7,
+      max_tokens: 500,
+    });
+
+    const content = response.choices[0]?.message?.content;
+    // console.log("AI-generated keywords:", content);
+    return content ? parseAIKeywords(content) : [];
+  } catch (error) {
+    console.error("AI keyword generation failed:", error);
+    return [];
+  }
+}
+
+function parseAIKeywords(rawText: string): string[] {
+  return rawText
+    .split(",")
+    .map((k) => k.trim().toLowerCase())
+    .filter((k) => k.length > 2 && k.length < 60);
+}
+
+function createLocationPatterns(
+  businessType: string,
+  locations: string[]
+): string[] {
+  const serviceForms = [
+    businessType,
+    `${businessType} services`,
+    `${businessType} company`,
+    `${businessType} near me`,
+    `best ${businessType}`,
+    `affordable ${businessType}`,
+  ];
+
+  const patterns: string[] = [];
+
+  for (const service of serviceForms) {
+    for (const location of locations) {
+      patterns.push(`${service} ${location}`);
+      patterns.push(`${location} ${service}`);
     }
-    // Also add some without location for broader terms
-    keywords.push(base)
   }
 
-  // Add some long-tail variations
-  const longTailPrefixes = [
-    "best",
-    "top",
-    "affordable",
-    "professional",
-    "local",
-    "experienced",
-    "trusted",
-    "licensed",
-    "emergency",
-  ]
-
-  for (const prefix of longTailPrefixes) {
-    for (const base of baseKeywords.slice(0, 3)) {
-      // Use just the top few base keywords
-      for (const loc of locationKeywords.slice(0, 2)) {
-        // Use just the main location variants
-        keywords.push(`${prefix} ${base} ${loc}`)
-      }
-    }
-  }
-
-  // Deduplicate and return
-  return [...new Set(keywords)].slice(0, 50) // Limit to 50 keywords
+  return patterns;
 }
-
-function getBaseKeywords(businessType: string) {
-  // Sample base keywords for common business types
-  const keywordMap: Record<string, string[]> = {
-    roofing: [
-      "roof repair",
-      "roof replacement",
-      "roofing company",
-      "roofing contractor",
-      "roof installation",
-      "roof inspection",
-      "metal roofing",
-      "shingle roof",
-      "commercial roofing",
-      "residential roofing",
-    ],
-    plumbing: [
-      "plumber",
-      "plumbing services",
-      "plumbing repair",
-      "emergency plumber",
-      "water heater installation",
-      "drain cleaning",
-      "pipe repair",
-      "bathroom plumbing",
-      "kitchen plumbing",
-      "commercial plumbing",
-    ],
-    "home improvement": [
-      "home renovation",
-      "kitchen remodeling",
-      "bathroom remodeling",
-      "home remodeling",
-      "home addition",
-      "basement finishing",
-      "deck building",
-      "interior painting",
-      "exterior painting",
-      "flooring installation",
-    ],
-    // Add more business types as needed
-  }
-
-  // Return keywords for the specified business type, or generic ones if not found
-  return (
-    keywordMap[businessType.toLowerCase()] || [
-      `${businessType} services`,
-      `${businessType} company`,
-      `${businessType} near me`,
-      `best ${businessType}`,
-      `affordable ${businessType}`,
-      `local ${businessType}`,
-      `${businessType} prices`,
-      `${businessType} cost`,
-      `${businessType} quotes`,
-      `professional ${businessType}`,
-    ]
-  )
-}
-
-function getLocationVariants(location: string) {
-  // Extract city and state if provided in format "City, State"
-  let city = location
-  let state = ""
-
-  if (location.includes(",")) {
-    const parts = location.split(",").map((part) => part.trim())
-    city = parts[0]
-    state = parts[1]
-  }
-
-  // Generate location variants
-  const variants = [
-    location, // Original location
-    city, // Just the city
-    `${city} area`, // City area
-    `near ${city}`, // Near city
-    `in ${city}`, // In city
-  ]
-
-  // Add state variants if state is provided
-  if (state) {
-    variants.push(state)
-    variants.push(`${city} ${state}`)
-  }
-
-  // Add "near me" as a common search term
-  variants.push("near me")
-
-  return variants
-}
-

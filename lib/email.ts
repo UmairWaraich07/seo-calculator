@@ -65,7 +65,7 @@ export async function sendReportEmail(email: string, report: any) {
     to: email,
     subject: `Your SEO Opportunity Report for ${basicInfo.businessUrl}`,
     html: emailHtml,
-    replyTo: "support@youragency.com",
+    replyTo: "umair@joinaiautomation.com",
   });
 }
 

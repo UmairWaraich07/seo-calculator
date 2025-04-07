@@ -1,50 +1,88 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui/button"
-import { Search, ArrowUpDown } from "lucide-react"
+import { useState } from "react";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Search, ArrowUpDown, MapPin } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface KeywordTableProps {
-  keywordData: any[]
+  keywordData: any[];
+  analysisScope?: "local" | "national";
 }
 
-export const KeywordTable = ({ keywordData }: KeywordTableProps) => {
-  const [searchTerm, setSearchTerm] = useState("")
-  const [sortField, setSortField] = useState<"keyword" | "searchVolume" | "clientRank">("searchVolume")
-  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc")
+export const KeywordTable = ({
+  keywordData,
+  analysisScope = "local",
+}: KeywordTableProps) => {
+  const [searchTerm, setSearchTerm] = useState("");
+  const [sortField, setSortField] = useState<
+    "keyword" | "searchVolume" | "clientRank"
+  >("searchVolume");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+  const [filter, setFilter] = useState<"all" | "local" | "national">("all");
 
   // Filter and sort keywords
   const filteredKeywords = keywordData
-    .filter((kw) => kw.keyword.toLowerCase().includes(searchTerm.toLowerCase()))
+    .filter((kw) => {
+      // Apply search filter
+      const matchesSearch = kw.keyword
+        .toLowerCase()
+        .includes(searchTerm.toLowerCase());
+
+      // Apply local/national filter
+      if (filter === "all") return matchesSearch;
+      if (filter === "local") return matchesSearch && kw.isLocal;
+      if (filter === "national") return matchesSearch && !kw.isLocal;
+
+      return matchesSearch;
+    })
     .sort((a, b) => {
       if (sortField === "keyword") {
-        return sortDirection === "asc" ? a.keyword.localeCompare(b.keyword) : b.keyword.localeCompare(a.keyword)
+        return sortDirection === "asc"
+          ? a.keyword.localeCompare(b.keyword)
+          : b.keyword.localeCompare(a.keyword);
       } else if (sortField === "searchVolume") {
-        return sortDirection === "asc" ? a.searchVolume - b.searchVolume : b.searchVolume - a.searchVolume
+        return sortDirection === "asc"
+          ? a.searchVolume - b.searchVolume
+          : b.searchVolume - a.searchVolume;
       } else {
         // Handle "Not ranked" values
-        const rankA = a.clientRank === "Not ranked" ? 101 : a.clientRank
-        const rankB = b.clientRank === "Not ranked" ? 101 : b.clientRank
+        const rankA = a.clientRank === "Not ranked" ? 101 : a.clientRank;
+        const rankB = b.clientRank === "Not ranked" ? 101 : b.clientRank;
 
-        return sortDirection === "asc" ? rankA - rankB : rankB - rankA
+        return sortDirection === "asc" ? rankA - rankB : rankB - rankA;
       }
-    })
+    });
 
   const toggleSort = (field: "keyword" | "searchVolume" | "clientRank") => {
     if (sortField === field) {
-      setSortDirection(sortDirection === "asc" ? "desc" : "asc")
+      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
     } else {
-      setSortField(field)
-      setSortDirection("desc")
+      setSortField(field);
+      setSortDirection("desc");
     }
-  }
+  };
 
   return (
     <div>
-      <div className="flex items-center mb-4">
-        <div className="relative flex-1">
+      <div className="flex items-center justify-between mb-4">
+        <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
           <Input
             placeholder="Search keywords..."
@@ -53,6 +91,22 @@ export const KeywordTable = ({ keywordData }: KeywordTableProps) => {
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
+
+        <Select
+          value={filter}
+          onValueChange={(value) =>
+            setFilter(value as "all" | "local" | "national")
+          }
+        >
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Filter keywords" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Keywords</SelectItem>
+            <SelectItem value="local">Local Keywords</SelectItem>
+            <SelectItem value="national">National Keywords</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       <div className="rounded-md border">
@@ -94,27 +148,45 @@ export const KeywordTable = ({ keywordData }: KeywordTableProps) => {
           <TableBody>
             {filteredKeywords.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={3} className="text-center py-6 text-slate-500">
+                <TableCell
+                  colSpan={3}
+                  className="text-center py-6 text-slate-500"
+                >
                   No keywords found
                 </TableCell>
               </TableRow>
             ) : (
               filteredKeywords.map((kw, index) => (
                 <TableRow key={index}>
-                  <TableCell className="font-medium">{kw.keyword}</TableCell>
-                  <TableCell className="text-center">{kw.searchVolume.toLocaleString()}</TableCell>
+                  <TableCell className="font-medium">
+                    <div className="flex items-center">
+                      {kw.keyword}
+                      {kw.isLocal && (
+                        <Badge
+                          variant="outline"
+                          className="ml-2 flex items-center gap-1"
+                        >
+                          <MapPin className="h-3 w-3" />
+                          Local
+                        </Badge>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-center">
+                    {kw.searchVolume.toLocaleString()}
+                  </TableCell>
                   <TableCell className="text-center">
                     <span
                       className={
                         kw.clientRank === "Not ranked"
                           ? "text-slate-500"
                           : kw.clientRank <= 3
-                            ? "text-green-600 font-medium"
-                            : kw.clientRank <= 10
-                              ? "text-blue-600 font-medium"
-                              : kw.clientRank <= 50
-                                ? "text-amber-600"
-                                : "text-red-600"
+                          ? "text-green-600 font-medium"
+                          : kw.clientRank <= 10
+                          ? "text-blue-600 font-medium"
+                          : kw.clientRank <= 50
+                          ? "text-amber-600"
+                          : "text-red-600"
                       }
                     >
                       {kw.clientRank}
@@ -127,6 +199,5 @@ export const KeywordTable = ({ keywordData }: KeywordTableProps) => {
         </Table>
       </div>
     </div>
-  )
-}
-
+  );
+};
