@@ -93,7 +93,7 @@ export async function POST(request: Request) {
         await fixedReportDoc.save();
         return NextResponse.json({
           success: true,
-          reportId: fixedReportDoc._id.toString(),
+          reportId: (fixedReportDoc._id as any).toString(),
         });
       } catch (fixedSaveError) {
         console.error("Error saving fixed report to database:", fixedSaveError);
@@ -103,7 +103,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       success: true,
-      reportId: reportDoc._id.toString(),
+      reportId: (reportDoc._id as any).toString(),
     });
   } catch (error: any) {
     console.error("Error processing SEO data:", error);

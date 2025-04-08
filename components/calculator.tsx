@@ -55,7 +55,31 @@ export const Calculator = () => {
     setProgress(0);
     setProcessingStage("initializing");
 
-    // Start the processing
+    // Start the progress simulation immediately
+    let isApiCompleted = false;
+    let progressInterval: NodeJS.Timeout | null = null;
+
+    const startProgressSimulation = () => {
+      progressInterval = setInterval(() => {
+        setProgress((prev) => {
+          // If API is done, go to 100%
+          if (isApiCompleted) {
+            if (progressInterval) clearInterval(progressInterval);
+            return 100;
+          }
+          // Otherwise progress up to 95%
+          if (prev >= 95) {
+            return 95; // Hold at 95% until API completes
+          }
+          return prev + 2.5;
+        });
+      }, 3000); // runs every 3 seconds
+    };
+
+    // Start the simulation immediately
+    startProgressSimulation();
+
+    // Process the API request concurrently
     try {
       const response = await fetch("/api/process-seo", {
         method: "POST",
@@ -76,19 +100,17 @@ export const Calculator = () => {
       const result = await response.json();
       setReportId(result.reportId);
 
-      // Simulate progress updates
-      const interval = setInterval(() => {
-        setProgress((prev) => {
-          if (prev >= 95) {
-            clearInterval(interval);
-            setCurrentStep("email");
-            return 100;
-          }
-          return prev + 5;
-        });
-      }, 3000);
+      // API request completed successfully
+      isApiCompleted = true;
+
+      // If progress simulation is still running at 95%, move to 100%
+      setProgress(100);
+      if (progressInterval) clearInterval(progressInterval);
+      setCurrentStep("email");
     } catch (error) {
       console.error("Error processing SEO data:", error);
+      if (progressInterval) clearInterval(progressInterval); // Stop progress simulation
+
       toast({
         title: "Error",
         description:
@@ -96,6 +118,7 @@ export const Calculator = () => {
           "An error occurred while processing your data. Please try again.",
         variant: "destructive",
       });
+
       // Reset to competitor step
       setCurrentStep("competitors");
     }

@@ -13,16 +13,30 @@ export const ProcessingScreen = ({
   analysisScope,
 }: ProcessingScreenProps) => {
   const getStatusMessage = () => {
-    if (progress < 25) {
+    if (progress < 5) {
       return "Analyzing your website...";
-    } else if (progress < 50) {
+    } else if (progress < 10) {
+      return "Collecting relevant keywords...";
+    } else if (progress < 20) {
       return analysisScope === "local"
         ? "Gathering local competitor data..."
         : "Gathering national competitor data...";
-    } else if (progress < 75) {
+    } else if (progress < 30) {
       return "Collecting keyword rankings...";
-    } else {
+    } else if (progress < 40) {
+      return "Collecting search volume for keywords...";
+    } else if (progress < 50) {
+      return "Gathering ranking of each keyword for your website...";
+    } else if (progress < 70) {
+      return "Gathering ranking of each keyword for competitors websites...";
+    } else if (progress < 80) {
+      return "Analyzing search volume data...";
+    } else if (progress < 85) {
       return "Calculating revenue opportunities...";
+    } else if (progress < 95) {
+      return "Finalizing your SEO report...";
+    } else {
+      return "Processing your data...";
     }
   };
 
