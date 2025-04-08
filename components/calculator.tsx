@@ -8,7 +8,7 @@ import { CompetitorForm } from "@/components/competitor-form";
 import { EmailForm } from "@/components/email-form";
 import { ProcessingScreen } from "@/components/processing-screen";
 import { Progress } from "@/components/ui/progress";
-import { toast } from "@/components/ui/use-toast";
+import { toast } from "./ui/toast";
 
 type CalculatorStep = "basic-info" | "competitors" | "processing" | "email";
 
@@ -71,7 +71,7 @@ export const Calculator = () => {
           if (prev >= 95) {
             return 95; // Hold at 95% until API completes
           }
-          return prev + 2.5;
+          return prev + 5;
         });
       }, 3000); // runs every 3 seconds
     };

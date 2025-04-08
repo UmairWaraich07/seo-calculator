@@ -19,7 +19,7 @@ import { MapPin, Globe, AlertCircle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import type { CompetitorInfo } from "./calculator";
 import { LoadingSpinner } from "./loading-spinner";
-import { toast } from "@/components/ui/use-toast";
+import { toast } from "./ui/toast";
 
 const formSchema = z.object({
   competitors: z
@@ -89,11 +89,11 @@ export const CompetitorForm = ({
           businessUrl,
         }),
       });
-
       if (!response.ok) {
         const errorData = await response.json();
+
         throw new Error(
-          errorData.details ||
+          errorData.error ||
             `Failed to detect competitors: ${response.statusText}`
         );
       }
