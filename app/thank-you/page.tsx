@@ -37,7 +37,7 @@ export default async function ThankYouPage({
             </p>
 
             <Button asChild className="w-full">
-              <Link href="/schedule-call">Schedule a Free Consultation</Link>
+              <Link href="#">Schedule a Free Consultation</Link>
             </Button>
 
             <Button variant="outline" asChild className="w-full">
