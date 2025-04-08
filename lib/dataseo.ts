@@ -542,7 +542,7 @@ export async function getDomainRankings(
         const taskIds = postResponse.tasks.map((task: any) => task.id);
 
         // Wait a moment for tasks to process
-        await new Promise((resolve) => setTimeout(resolve, 40000));
+        await new Promise((resolve) => setTimeout(resolve, 30000));
 
         // Poll for results using the updated polling function
         const taskResults = await pollForResults(taskIds);
