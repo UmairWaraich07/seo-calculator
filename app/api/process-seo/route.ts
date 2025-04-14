@@ -32,7 +32,8 @@ export async function POST(request: Request) {
       competitorInfo.competitors.filter(Boolean), // Filter out empty strings
       keywords,
       basicInfo.analysisScope,
-      basicInfo.location
+      basicInfo.location,
+      basicInfo.locationCode
     );
 
     // Calculate potential traffic and revenue

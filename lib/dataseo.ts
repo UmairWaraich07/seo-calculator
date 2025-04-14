@@ -55,46 +55,76 @@ async function makeRequest(
 }
 
 /**
- * Get keyword data from DataForSEO using the clickstream data endpoint
- * This endpoint can handle up to 1000 keywords in a single request and is optimized for search volume data
+ * Get keyword data from DataForSEO using the Google Ads search volume endpoint
+ * This endpoint provides search volume data through a task-based approach
  */
 export async function getKeywordData(
   keywords: string[],
   location: string,
-  language = "en"
+  language = "en",
+  locationCode?: number
 ) {
   try {
-    // Get location code for the specified location
-    const locationCode = await getLocationCode(location);
+    // Get location code for the specified location, using the provided code if available
+    const code = locationCode || (await getLocationCode(location));
 
-    // Prepare the request data - this endpoint can handle up to 1000 keywords at once
-    const data = [
+    // Step 1: Create a task to fetch search volume data
+    const taskPostData = [
       {
+        location_code: code,
         keywords: keywords,
-        location_code: locationCode,
-        language_code: language,
       },
     ];
 
-    // Make the request to DataForSEO's clickstream data endpoint
     console.log(
-      `Fetching search volume data for ${keywords.length} keywords from DataForSEO`
-    );
-    const response = await makeRequest(
-      "/keywords_data/clickstream_data/dataforseo_search_volume/live",
-      "POST",
-      data
+      `Creating search volume task for ${keywords.length} keywords from DataForSEO using location code: ${code}`
     );
 
-    const processedData = processKeywordVolumeData(response, keywords);
+    const taskResponse = await makeRequest(
+      "/keywords_data/google_ads/search_volume/task_post",
+      "POST",
+      taskPostData
+    );
+
+    // Check if task was created successfully
+    if (
+      !taskResponse.tasks ||
+      !taskResponse.tasks.length ||
+      !taskResponse.tasks[0].id
+    ) {
+      throw new Error("Failed to create search volume task");
+    }
+
+    const taskId = taskResponse.tasks[0].id;
+    console.log(`Search volume task created with ID: ${taskId}`);
+
+    // Step 2: Wait for the task to complete with improved polling
+    console.log(`Waiting for task ${taskId} to complete...`);
+    const results = await pollForResults([taskId], 20, 3000, "keywords_data");
+
+    if (results.length === 0) {
+      console.warn(
+        "No results returned from polling. Task may still be in progress."
+      );
+      // Return empty data rather than failing completely
+      return keywords.map((keyword) => ({
+        keyword,
+        searchVolume: 0,
+        cpc: null,
+        competition: null,
+      }));
+    }
+
+    console.log("Processed Keywords Data", results);
+
+    // Process the results
+    const processedData = processKeywordVolumeData(results[0], keywords);
     console.log(
-      `search volume data fetched for ${processedData.length} keywords`
+      `Search volume data fetched for ${processedData.length} keywords`
     );
     return processedData;
   } catch (error) {
     console.error("Error getting keyword data:", error);
-
-    // Generate fallback data if the API call fails
     throw new Error(
       `Failed to fetch keyword data: ${(error as Error).message}`
     );
@@ -102,29 +132,23 @@ export async function getKeywordData(
 }
 
 /**
- * Process keyword volume data from DataForSEO response
+ * Process keyword volume data from DataForSEO Google Ads response
  */
-function processKeywordVolumeData(response: any, originalKeywords: string[]) {
+function processKeywordVolumeData(taskResult: any, originalKeywords: string[]) {
   try {
     const keywordData: any[] = [];
     const processedKeywords = new Set<string>();
 
-    if (response.tasks && Array.isArray(response.tasks)) {
-      for (const task of response.tasks) {
-        if (task.result && Array.isArray(task.result)) {
-          for (const result of task.result) {
-            if (result.items && Array.isArray(result.items)) {
-              // Process each keyword item
-              for (const item of result.items) {
-                keywordData.push({
-                  keyword: item.keyword,
-                  searchVolume: item.search_volume || 0,
-                });
-                processedKeywords.add(item.keyword);
-              }
-            }
-          }
-        }
+    if (taskResult && taskResult.result && Array.isArray(taskResult.result)) {
+      // Process each keyword item
+      for (const item of taskResult.result) {
+        keywordData.push({
+          keyword: item.keyword,
+          searchVolume: item.search_volume || 0,
+          cpc: item.cpc || null,
+          competition: item.competition || null,
+        });
+        processedKeywords.add(item.keyword);
       }
     }
 
@@ -135,9 +159,8 @@ function processKeywordVolumeData(response: any, originalKeywords: string[]) {
         keywordData.push({
           keyword,
           searchVolume: 0,
-          keywordDifficulty: null,
           cpc: null,
-          organicResults: [],
+          competition: null,
         });
       }
     }
@@ -157,17 +180,14 @@ function processKeywordVolumeData(response: any, originalKeywords: string[]) {
 export async function getRankedKeywords(
   domain: string,
   location: string,
-  limit = 50
+  limit = 10
 ) {
   try {
-    // Get location code
-    const locationCode = await getLocationCode(location);
-
     // Prepare the request data
     const data = [
       {
         target: domain,
-        location_code: locationCode,
+        location_code: "2840", // Default to USA location code -> This API works on country level
         language_code: "en",
         limit: limit,
       },
@@ -241,11 +261,13 @@ function processRankedKeywordsData(response: any, domain: string) {
 export async function getLocationCode(location: string): Promise<number> {
   try {
     // Make request to get location data
-    const response = await makeRequest("/serp/google/locations", "GET");
+    const response = await makeRequest("/serp/google/locations", "GET", [
+      { country: "us" },
+    ]);
 
     // Find the location code for the specified location
     if (response.results && Array.isArray(response.results)) {
-      const locationData = response.results.find((loc: any) =>
+      const locationData = response.result.find((loc: any) =>
         loc.location_name.toLowerCase().includes(location.toLowerCase())
       );
 
@@ -269,75 +291,125 @@ export async function getLocationCode(location: string): Promise<number> {
  */
 async function pollForResults(
   taskIds: string[],
-  maxAttempts = 10,
-  delay = 5000
+  maxAttempts = 20,
+  initialDelay = 5000,
+  endpointType = "keywords_data"
 ) {
   let attempts = 0;
   const allResults: any[] = [];
-  const processedTaskIds = new Set<string>();
+  const pendingTaskIds = new Set(taskIds);
+  const completedTaskIds = new Set<string>();
 
-  while (attempts < maxAttempts && processedTaskIds.size < taskIds.length) {
+  console.log(
+    `Starting to poll for results of ${taskIds.length} tasks using ${endpointType} endpoint...`
+  );
+
+  // Use exponential backoff for retries
+  let currentDelay = initialDelay;
+
+  while (attempts < maxAttempts && pendingTaskIds.size > 0) {
+    attempts++;
     console.log(
-      `Checking for results (Attempt ${attempts + 1}/${maxAttempts})...`
+      `Polling attempt ${attempts}/${maxAttempts} for ${pendingTaskIds.size} remaining tasks...`
     );
 
-    // Process each task ID individually with a GET request
-    for (const taskId of taskIds) {
-      // Skip already processed tasks
-      if (processedTaskIds.has(taskId)) continue;
-
+    // Process each pending task ID individually
+    for (const taskId of Array.from(pendingTaskIds)) {
       try {
-        // Use a GET request for each individual task ID
-        const endpoint = `/serp/google/organic/task_get/advanced/${taskId}`;
+        // Determine the correct endpoint based on the endpointType
+        let endpoint = "";
+        if (endpointType === "keywords_data") {
+          endpoint = `/keywords_data/google_ads/search_volume/task_get/${taskId}`;
+        } else if (endpointType === "serp") {
+          endpoint = `/serp/google/organic/task_get/advanced/${taskId}`;
+        } else {
+          throw new Error(`Unknown endpoint type: ${endpointType}`);
+        }
+
         const response = await makeRequest(endpoint, "GET");
 
-        if (
-          response.tasks &&
-          response.tasks.length > 0 &&
-          response.tasks[0].result
-        ) {
-          // Add this task's results to our collection
-          allResults.push(response.tasks[0]);
-          processedTaskIds.add(taskId);
+        console.log(
+          `Task ${taskId} status: ${response.tasks?.[0]?.status_code} - ${response.tasks?.[0]?.status_message}`
+        );
+
+        // Check the status code
+        if (response.tasks && response.tasks.length > 0) {
+          const task = response.tasks[0];
+
+          // Task completed successfully
+          if (task.status_code === 20000) {
+            console.log(`Task ${taskId} completed successfully`);
+            allResults.push(task);
+            pendingTaskIds.delete(taskId);
+            completedTaskIds.add(taskId);
+          }
+          // Task created but not yet processed
+          else if (task.status_code === 20100) {
+            console.log(`Task ${taskId} created but not yet processed`);
+          }
+          // Task in queue
+          else if (task.status_code === 40602 || task.status_code === 40601) {
+            console.log(`Task ${taskId} is in queue or being processed`);
+          }
+          // Error codes that indicate we should stop trying
+          else if (
+            [
+              40100, 40200, 40201, 40202, 40203, 40204, 40400, 40401, 40402,
+              40403, 50000,
+            ].includes(task.status_code)
+          ) {
+            console.error(
+              `Task ${taskId} failed with error: ${task.status_code} - ${task.status_message}`
+            );
+            pendingTaskIds.delete(taskId);
+          }
+          // Other error codes - we might want to retry
+          else {
+            console.warn(
+              `Task ${taskId} returned status code ${task.status_code}: ${task.status_message}`
+            );
+          }
         }
       } catch (error) {
         console.warn(`Error fetching results for task ${taskId}:`, error);
-        // Continue with other tasks even if one fails
       }
     }
 
     // If we have results for all tasks, return them
-    if (processedTaskIds.size === taskIds.length) {
+    if (pendingTaskIds.size === 0) {
+      console.log(`All ${completedTaskIds.size} tasks completed successfully`);
       return allResults;
     }
 
-    // Wait before retrying
-    await new Promise((resolve) => setTimeout(resolve, delay));
-    attempts++;
+    // Wait before retrying with exponential backoff
+    console.log(`Waiting ${currentDelay}ms before next polling attempt...`);
+    await new Promise((resolve) => setTimeout(resolve, currentDelay));
+
+    // Increase delay for next attempt (exponential backoff with max of 30 seconds)
+    currentDelay = Math.min(currentDelay * 1.5, 30000);
   }
 
   console.warn(
-    `Tasks did not complete in time. Got ${allResults.length} out of ${taskIds.length} tasks.`
+    `Polling completed. Got results for ${completedTaskIds.size} out of ${taskIds.length} tasks after ${attempts} attempts.`
   );
+
+  // Return the results we have, even if incomplete
   return allResults;
 }
-
 /**
  * Get competitor data for a domain
  */
 export async function getCompetitorData(domain: string, location: string) {
   try {
-    // Get location code
-    const locationCode = await getLocationCode(location);
-
     // Prepare the request data
     const data = [
       {
         target: domain,
-        location_code: locationCode,
+        location_code: "2840", // Default to USA location code
         language_code: "en",
         language_name: "English",
-        limit: 3,
+        limit: 4,
+        exclude_top_domains: true,
       },
     ];
 
@@ -362,18 +434,30 @@ export async function getCompetitorData(domain: string, location: string) {
  */
 function processCompetitorData(response: any, domain: string) {
   try {
-    const competitors: any[] = [];
+    const allCompetitors: any[] = [];
+
+    // Normalize the user's domain by removing protocol and trailing slash
+    const normalizedUserDomain = domain
+      .replace(/^(https?:\/\/)?(www\.)?/i, "")
+      .replace(/\/$/, "");
 
     if (response.tasks && Array.isArray(response.tasks)) {
       for (const task of response.tasks) {
         if (task.result && Array.isArray(task.result)) {
           for (const result of task.result) {
             if (result.items && Array.isArray(result.items)) {
-              // Get top 5 competitors
-              const topCompetitors = result.items.slice(0, 5);
+              for (const competitor of result.items) {
+                // Normalize the competitor domain
+                const normalizedCompetitorDomain = competitor.domain
+                  .replace(/^(https?:\/\/)?(www\.)?/i, "")
+                  .replace(/\/$/, "");
 
-              for (const competitor of topCompetitors) {
-                competitors.push({
+                // Skip if this is the user's own domain
+                if (normalizedCompetitorDomain === normalizedUserDomain) {
+                  continue;
+                }
+
+                allCompetitors.push({
                   name: competitor.domain,
                   url: `https://${competitor.domain}`,
                   source: "DataForSEO",
@@ -389,11 +473,12 @@ function processCompetitorData(response: any, domain: string) {
     }
 
     // If no competitors were found, generate mock data
-    if (competitors.length === 0) {
+    if (allCompetitors.length === 0) {
       throw new Error("No competitors found for the domain");
     }
 
-    return competitors;
+    // Return top 3 competitors
+    return allCompetitors.slice(0, 3);
   } catch (error) {
     console.error("Error processing competitor data:", error);
     throw error;
@@ -405,17 +490,15 @@ function processCompetitorData(response: any, domain: string) {
  */
 export async function getLocalCompetitors(
   businessType: string,
-  location: string
+  location: string,
+  businessUrl?: string
 ) {
   try {
-    // Get location code
-    const locationCode = await getLocationCode(location);
-
     // Prepare the request data
     const data = [
       {
         keyword: `${businessType} in ${location}`,
-        location_code: locationCode,
+        location_code: "2840", // Default to USA location code
         language_code: "en",
       },
     ];
@@ -429,7 +512,12 @@ export async function getLocalCompetitors(
 
     console.log("Local competitors response:", response.tasks);
 
-    return processLocalCompetitorData(response, businessType, location);
+    return processLocalCompetitorData(
+      response,
+      businessType,
+      location,
+      businessUrl
+    );
   } catch (error) {
     console.error("Error getting local competitors:", error);
     throw error;
@@ -442,10 +530,16 @@ export async function getLocalCompetitors(
 function processLocalCompetitorData(
   response: any,
   businessType: string,
-  location: string
+  location: string,
+  businessUrl?: string
 ) {
   try {
-    const competitors: any[] = [];
+    const allCompetitors: any[] = [];
+
+    // Normalize the businessUrl by removing trailing slash if present
+    const normalizedBusinessUrl = businessUrl
+      ? businessUrl.replace(/\/$/, "")
+      : undefined;
 
     if (response.tasks && Array.isArray(response.tasks)) {
       for (const task of response.tasks) {
@@ -454,11 +548,24 @@ function processLocalCompetitorData(
             if (result.items && Array.isArray(result.items)) {
               // Get local businesses from the results
               for (const item of result.items) {
-                competitors.push({
+                // Normalize the competitor URL by removing trailing slash if present
+                const normalizedItemUrl = item.url
+                  ? item.url.replace(/\/$/, "")
+                  : "";
+
+                // Skip the user's own business if the normalized URLs match
+                if (
+                  normalizedBusinessUrl &&
+                  normalizedItemUrl === normalizedBusinessUrl
+                ) {
+                  continue;
+                }
+
+                allCompetitors.push({
                   name: item.title,
                   url: item.url,
                   source: "Google Maps",
-                  rating: item.rating?.value || 0, // Random rating between 3 and 5
+                  rating: item.rating?.value || 0,
                   reviewCount: item.rating?.votes_count || 0,
                   address: item.address || "",
                 });
@@ -468,15 +575,14 @@ function processLocalCompetitorData(
         }
       }
     }
-
     // If no competitors were found, generate mock data
-    if (competitors.length === 0) {
+    if (allCompetitors.length === 0) {
       throw new Error("No local competitors found");
     }
 
     return {
       searchTerm: `${businessType} in ${location}`,
-      competitors: competitors.slice(0, 3), // Ensures only 3 competitors are returned
+      competitors: allCompetitors.slice(0, 3), // Ensures only 3 competitors are returned
     };
   } catch (error) {
     console.error("Error processing local competitor data:", error);
@@ -490,12 +596,10 @@ function processLocalCompetitorData(
 export async function getDomainRankings(
   domains: string[],
   keywords: string[],
-  location: string
+  location: string,
+  locationCode: number
 ) {
   try {
-    // Get location code
-    const locationCode = await getLocationCode(location);
-
     // Split keywords into batches of 50 (DataForSEO's limit)
     const batchSize = 50; // Reduce batch size to avoid overloading the API
     const keywordBatches = [];
@@ -525,7 +629,7 @@ export async function getDomainRankings(
 
         // Submit tasks
         console.log(
-          `Submitting batch of ${batch.length} keywords to DataForSEO SERP API`
+          `Submitting batch of ${batch.length} keywords to DataForSEO SERP API using location code: ${locationCode}`
         );
         const postResponse = await makeRequest(
           "/serp/google/organic/task_post",
@@ -541,11 +645,15 @@ export async function getDomainRankings(
         // Extract task IDs
         const taskIds = postResponse.tasks.map((task: any) => task.id);
 
-        // Wait a moment for tasks to process
-        await new Promise((resolve) => setTimeout(resolve, 30000));
+        console.log(
+          `Created ${taskIds.length} SERP tasks, waiting for completion...`
+        );
 
-        // Poll for results using the updated polling function
-        const taskResults = await pollForResults(taskIds);
+        // Poll for results using the improved polling function
+        const taskResults = await pollForResults(taskIds, 20, 10000, "serp");
+        console.log(
+          `Received results for ${taskResults.length} out of ${taskIds.length} SERP tasks`
+        );
 
         // Process the results for all domains at once
         for (const task of taskResults) {
@@ -611,11 +719,22 @@ export async function fetchKeywordData(
   competitorUrls: string[],
   keywords: string[],
   analysisScope: "local" | "national" = "local",
-  location = "United States"
+  location = "United States",
+  locationCode: number
 ) {
   try {
+    // If analysis scope is national, use US location code
+    if (analysisScope === "national") {
+      locationCode = 2840; // US location code
+      console.log("Using US location code (2840) for national analysis");
+    }
     console.log(`Fetching keyword data from DataForSEO for ${clientUrl}`);
     console.log(`Analysis scope: ${analysisScope}`);
+    console.log(
+      `Using location: ${location}${
+        locationCode ? ` (code: ${locationCode})` : ""
+      }`
+    );
 
     // Get domain from URL
     const clientDomain = getDomainFromUrl(clientUrl);
@@ -664,8 +783,13 @@ export async function fetchKeywordData(
 
     console.log(`Combined keywords for analysis: ${allKeywords.length}`);
 
-    // 2. Get keyword data for all keywords using the clickstream data endpoint
-    const keywordData = await getKeywordData(allKeywords, location);
+    // 2. Get keyword data for all keywords
+    const keywordData = await getKeywordData(
+      allKeywords,
+      location,
+      "en",
+      locationCode
+    );
 
     // 3. Sort keywords by search volume and take only the top 50
     keywordData.sort((a, b) => (b.searchVolume || 0) - (a.searchVolume || 0));
@@ -680,7 +804,8 @@ export async function fetchKeywordData(
     const rankingsForTop50 = await getDomainRankings(
       allDomains,
       top50Keywords,
-      location
+      location,
+      locationCode
     );
     console.log(
       "Rankings fetched for all domains successfully (top 50 keywords)"
@@ -719,11 +844,6 @@ export async function fetchKeywordData(
       const searchVolume =
         rankedData?.searchVolume || keywordDataItem?.searchVolume || 0;
 
-      const keywordDifficulty =
-        rankedData?.keywordDifficulty ||
-        keywordDataItem?.keywordDifficulty ||
-        0;
-
       const cpc = rankedData?.cpc || keywordDataItem?.cpc || "0.00";
 
       // Add scope-specific data
@@ -733,10 +853,7 @@ export async function fetchKeywordData(
               hasLocalPack: isLocal,
               localIntent: isLocal ? 8 : 3,
             }
-          : {
-              keywordDifficulty,
-              cpc,
-            };
+          : { cpc };
 
       return {
         keyword,
@@ -799,7 +916,8 @@ export async function fetchNationalCompetitors(
  */
 export async function fetchLocalCompetitors(
   businessType: string,
-  location: string
+  location: string,
+  businessUrl?: string
 ) {
   try {
     console.log(
@@ -807,7 +925,7 @@ export async function fetchLocalCompetitors(
     );
 
     // Get local competitor data from DataForSEO
-    return await getLocalCompetitors(businessType, location);
+    return await getLocalCompetitors(businessType, location, businessUrl);
   } catch (error) {
     console.error("Error fetching local competitors:", error);
     throw new Error(

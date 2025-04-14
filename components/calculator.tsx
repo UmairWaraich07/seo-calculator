@@ -19,6 +19,7 @@ export type BasicInfo = {
   customerValue: number;
   competitorType: "manual" | "auto";
   analysisScope: "local" | "national";
+  locationCode?: number;
 };
 
 export type CompetitorInfo = {
@@ -35,7 +36,9 @@ export const Calculator = () => {
     customerValue: 0,
     competitorType: "auto",
     analysisScope: "local",
+    locationCode: 2840, // Default to US
   });
+  console.log("Basic Info:", basicInfo);
   const [competitorInfo, setCompetitorInfo] = useState<CompetitorInfo>({
     competitors: ["", "", ""],
   });

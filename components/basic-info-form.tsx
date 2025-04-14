@@ -22,22 +22,43 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { LocationSelector } from "./location-selector";
 import type { BasicInfo } from "./calculator";
+import { useState, useEffect } from "react";
 
-const formSchema = z.object({
-  businessUrl: z.string().url("Please enter a valid URL"),
-  businessType: z.string().min(2, "Please enter your business type"),
-  location: z.string().min(2, "Please enter your location"),
-  customerValue: z.coerce.number().positive("Please enter a positive value"),
-  competitorType: z.enum(["manual", "auto"]),
-  analysisScope: z.enum(["local", "national"]),
-});
+const formSchema = z
+  .object({
+    businessUrl: z.string().url("Please enter a valid URL"),
+    businessType: z.string().min(2, "Please enter your business type"),
+    location: z.string(),
+    customerValue: z.coerce.number().positive("Please enter a positive value"),
+    competitorType: z.enum(["manual", "auto"]),
+    analysisScope: z.enum(["local", "national"]),
+  })
+  .refine(
+    (data) => {
+      // If analysis scope is local, location must be provided
+      if (data.analysisScope === "local") {
+        return data.location.length >= 2;
+      }
+      return true;
+    },
+    {
+      message: "Location is required for local analysis",
+      path: ["location"],
+    }
+  );
 
 interface BasicInfoFormProps {
-  onSubmit: (data: BasicInfo) => void;
+  onSubmit: (data: BasicInfo & { locationCode: number }) => void;
 }
 
 export const BasicInfoForm = ({ onSubmit }: BasicInfoFormProps) => {
+  const [locationCode, setLocationCode] = useState<number>(
+    2840 // Default to US
+  );
+  const [isNationalScope, setIsNationalScope] = useState(false);
+
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -50,8 +71,60 @@ export const BasicInfoForm = ({ onSubmit }: BasicInfoFormProps) => {
     },
   });
 
+  // Watch for changes to analysisScope
+  const analysisScope = form.watch("analysisScope");
+
+  // Update isNationalScope when analysisScope changes
+  useEffect(() => {
+    setIsNationalScope(analysisScope === "national");
+
+    // If switching to national, set location code to US (2840)
+    if (analysisScope === "national") {
+      setLocationCode(2840);
+      // If there's a location value, keep it, otherwise set to "United States"
+      const currentLocation = form.getValues("location");
+      if (!currentLocation) {
+        form.setValue("location", "United States");
+      }
+    }
+  }, [analysisScope, form]);
+
+  // In the handleSubmit function, ensure location is always provided
   const handleSubmit = (data: z.infer<typeof formSchema>) => {
-    onSubmit(data);
+    // Additional validation for local analysis
+    if (
+      data.analysisScope === "local" &&
+      (!data.location || data.location.length < 2)
+    ) {
+      form.setError("location", {
+        type: "manual",
+        message: "Location is required for local analysis",
+      });
+      return;
+    }
+
+    // For national analysis, ensure location is set to at least "United States"
+    const finalData = {
+      ...data,
+      // Ensure location is always a string (never undefined)
+      location:
+        data.location ||
+        (data.analysisScope === "national" ? "United States" : ""),
+      locationCode,
+    };
+
+    onSubmit(finalData);
+  };
+
+  // Update the LocationSelector component to better handle location changes
+  const handleLocationChange = (value: string, code?: number) => {
+    console.log(
+      `Location changed to: ${value}${code ? ` (code: ${code})` : ""}`
+    );
+    form.setValue("location", value);
+    if (code) {
+      setLocationCode(code);
+    }
   };
 
   return (
@@ -83,34 +156,6 @@ export const BasicInfoForm = ({ onSubmit }: BasicInfoFormProps) => {
                     placeholder="e.g., Roofing, Home Improvement, Plumbing"
                     {...field}
                   />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="location"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Primary Location</FormLabel>
-                <FormControl>
-                  <Input placeholder="e.g., Chicago, IL" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="customerValue"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Average Customer Value ($)</FormLabel>
-                <FormControl>
-                  <Input type="number" placeholder="e.g., 5000" {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -182,6 +227,38 @@ export const BasicInfoForm = ({ onSubmit }: BasicInfoFormProps) => {
                     </TooltipProvider>
                   </div>
                 </div>
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="location"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Primary Location</FormLabel>
+                <FormControl>
+                  <LocationSelector
+                    value={field.value}
+                    onChange={handleLocationChange}
+                    isNationalScope={isNationalScope}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="customerValue"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Average Customer Value ($)</FormLabel>
+                <FormControl>
+                  <Input type="number" placeholder="e.g., 5000" {...field} />
+                </FormControl>
+                <FormMessage />
               </FormItem>
             )}
           />
