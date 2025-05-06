@@ -11,10 +11,9 @@ let cacheTimestamp = 0;
 const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
 
 export async function GET(request: Request) {
+  const url = new URL(request.url);
+  const state = url.searchParams.get("state");
   try {
-    const url = new URL(request.url);
-    const state = url.searchParams.get("state");
-
     console.log(
       `Locations API called with state parameter: ${state || "none"}`
     );
