@@ -26,6 +26,7 @@ import { LocationSelector } from "./location-selector";
 import type { BasicInfo } from "./calculator";
 import { useState, useEffect } from "react";
 
+// Update the form schema to properly validate location based on analysis scope
 const formSchema = z
   .object({
     businessUrl: z.string().url("Please enter a valid URL"),
@@ -50,12 +51,12 @@ const formSchema = z
   );
 
 interface BasicInfoFormProps {
-  onSubmit: (data: BasicInfo & { locationCode: number }) => void;
+  onSubmit: (data: BasicInfo & { locationCode?: number }) => void;
 }
 
 export const BasicInfoForm = ({ onSubmit }: BasicInfoFormProps) => {
-  const [locationCode, setLocationCode] = useState<number>(
-    2840 // Default to US
+  const [locationCode, setLocationCode] = useState<number | undefined>(
+    undefined
   );
   const [isNationalScope, setIsNationalScope] = useState(false);
 
@@ -116,11 +117,12 @@ export const BasicInfoForm = ({ onSubmit }: BasicInfoFormProps) => {
     onSubmit(finalData);
   };
 
-  // Update the LocationSelector component to better handle location changes
+  // Update the handleLocationChange function to store the location value directly
   const handleLocationChange = (value: string, code?: number) => {
     console.log(
       `Location changed to: ${value}${code ? ` (code: ${code})` : ""}`
     );
+    // Store just the city or state name in the form value
     form.setValue("location", value);
     if (code) {
       setLocationCode(code);
@@ -138,7 +140,27 @@ export const BasicInfoForm = ({ onSubmit }: BasicInfoFormProps) => {
               <FormItem>
                 <FormLabel>Your Website URL</FormLabel>
                 <FormControl>
-                  <Input placeholder="https://yourwebsite.com" {...field} />
+                  <Input
+                    placeholder="https://yourwebsite.com"
+                    {...field}
+                    onChange={(e) => {
+                      let value = e.target.value;
+
+                      // Only add https:// if:
+                      // 1. The value is not empty
+                      // 2. The value doesn't already contain "://" (either http:// or https://)
+                      // 3. The user isn't in the process of deleting (value length is increasing)
+                      if (
+                        value &&
+                        !value.includes("://") &&
+                        value.length > (field.value?.length || 0)
+                      ) {
+                        value = `https://${value}`;
+                      }
+
+                      field.onChange(value);
+                    }}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -236,7 +258,12 @@ export const BasicInfoForm = ({ onSubmit }: BasicInfoFormProps) => {
             name="location"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Primary Location</FormLabel>
+                <FormLabel>
+                  Primary Location
+                  {!isNationalScope && (
+                    <span className="text-red-500 ml-1">*</span>
+                  )}
+                </FormLabel>
                 <FormControl>
                   <LocationSelector
                     value={field.value}

@@ -1,3 +1,9 @@
+import OpenAI from "openai";
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY!,
+});
+
 /**
  * DataForSEO API client for SEO data
  */
@@ -386,7 +392,7 @@ async function pollForResults(
     await new Promise((resolve) => setTimeout(resolve, currentDelay));
 
     // Increase delay for next attempt (exponential backoff with max of 30 seconds)
-    currentDelay = Math.min(currentDelay * 1.5, 30000);
+    currentDelay = Math.min(currentDelay, 30000);
   }
 
   console.warn(
@@ -491,14 +497,15 @@ function processCompetitorData(response: any, domain: string) {
 export async function getLocalCompetitors(
   businessType: string,
   location: string,
-  businessUrl?: string
+  businessUrl?: string,
+  locationCode?: number
 ) {
   try {
     // Prepare the request data
     const data = [
       {
         keyword: `${businessType} in ${location}`,
-        location_code: "2840", // Default to USA location code
+        location_code: locationCode,
         language_code: "en",
       },
     ];
@@ -712,6 +719,95 @@ export async function getDomainRankings(
 }
 
 /**
+ * Filter irrelevant keywords using AI before performing detailed keyword analysis
+ */
+async function filterIrrelevantKeywords(
+  keywords: string[],
+  businessType: string,
+  clientUrl: string,
+  analysisScope: "local" | "national",
+  location: string
+): Promise<string[]> {
+  try {
+    console.log(`Filtering ${keywords.length} keywords for relevance...`);
+
+    // Extract domain name for context
+    const clientDomain = getDomainFromUrl(clientUrl);
+    const businessName = clientDomain.split(".")[0];
+
+    // Process all keywords in a single API call
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        {
+          role: "system",
+          content: `You are an AI specializing in SEO keyword relevance analysis for ${businessType} businesses. Your task is to filter out irrelevant keywords that would contaminate an SEO report.
+
+CONTEXT:
+- Business type: ${businessType}
+- Business domain: ${clientDomain}
+- Business name: ${businessName}
+- Location focus: ${
+            analysisScope === "local" ? location : "National (United States)"
+          }
+
+TASK: Analyze each keyword in the provided list and determine if it is relevant to this specific business type and scope. Return ONLY the relevant keywords as a JSON array.
+
+RELEVANCE CRITERIA:
+1. MUST be related to products/services this business type typically offers
+2. MUST have commercial or informational intent related to this business
+3. MUST NOT be related to:
+   - Jobs/careers at this type of business
+   - Competing businesses (unless specifically comparing with this business type)
+   - Internal business operations unrelated to customer needs
+   - Brand names unrelated to this business
+   - Similar-sounding but unrelated concepts
+   - Irrelevant locations (for local businesses)
+
+INSTRUCTIONS:
+- Analyze each keyword in the JSON array
+- Return ONLY a JSON array of strings containing relevant keywords
+- Do not include any explanation, just the filtered JSON array
+- Return the array in exactly this format: {"keywords": ["keyword1", "keyword2", ...]}
+- When in doubt about relevance, include the keyword (err on inclusion)`,
+        },
+        {
+          role: "user",
+          content: `Here's the list of keywords to filter for a ${businessType} business${
+            analysisScope === "local" ? ` in ${location}` : " (national scope)"
+          }. Return only the relevant keywords as a valid JSON array.
+
+${JSON.stringify(keywords)}`,
+        },
+      ],
+      response_format: { type: "json_object" },
+      temperature: 0.2,
+    });
+
+    try {
+      const content = response.choices[0]?.message?.content || "{}";
+      const parsedResponse = JSON.parse(content);
+      const filteredKeywords = parsedResponse.keywords || [];
+
+      console.log(
+        `Filtered ${
+          keywords.length - filteredKeywords.length
+        } irrelevant keywords. ${filteredKeywords.length} keywords remain.`
+      );
+      return filteredKeywords;
+    } catch (e) {
+      console.error("Error parsing AI response:", e);
+      // If parsing fails, be conservative and return the original keywords
+      return keywords;
+    }
+  } catch (error) {
+    console.error("Error filtering keywords:", error);
+    // On error, return original keywords to avoid data loss
+    return keywords;
+  }
+}
+
+/**
  * Fetch keyword data for a client and competitors
  */
 export async function fetchKeywordData(
@@ -720,7 +816,8 @@ export async function fetchKeywordData(
   keywords: string[],
   analysisScope: "local" | "national" = "local",
   location = "United States",
-  locationCode: number
+  locationCode: number,
+  businessType: string // Added businessType parameter
 ) {
   try {
     // If analysis scope is national, use US location code
@@ -783,23 +880,46 @@ export async function fetchKeywordData(
 
     console.log(`Combined keywords for analysis: ${allKeywords.length}`);
 
-    // 2. Get keyword data for all keywords
-    const keywordData = await getKeywordData(
+    // Filter the irrelevant keywords from the list before getting the keyword data
+    const filteredKeywords = await filterIrrelevantKeywords(
       allKeywords,
+      businessType,
+      clientUrl,
+      analysisScope,
+      location
+    );
+
+    // 2. Get keyword data for all keywords (now filtered)
+    const keywordData = await getKeywordData(
+      filteredKeywords,
       location,
       "en",
       locationCode
     );
 
-    // 3. Sort keywords by search volume and take only the top 50
-    keywordData.sort((a, b) => (b.searchVolume || 0) - (a.searchVolume || 0));
-    const top50Keywords = keywordData.slice(0, 50).map((kw) => kw.keyword);
-
+    // 3. Filter out keywords with zero search volume
+    const keywordsWithSearchVolume = keywordData.filter(
+      (kw) => kw.searchVolume > 0
+    );
     console.log(
-      `Selected top 50 keywords by search volume for ranking analysis`
+      `Filtered out ${
+        keywordData.length - keywordsWithSearchVolume.length
+      } keywords with zero search volume`
     );
 
-    // 4. Get rankings for all domains (client + competitors) but only for top 50 keywords
+    // 4. Sort keywords by search volume and take only the top 50
+    keywordsWithSearchVolume.sort(
+      (a, b) => (b.searchVolume || 0) - (a.searchVolume || 0)
+    );
+    const top50Keywords = keywordsWithSearchVolume
+      .slice(0, 50)
+      .map((kw) => kw.keyword);
+
+    console.log(
+      `Selected top ${top50Keywords.length} keywords by search volume for ranking analysis`
+    );
+
+    // 5. Get rankings for all domains (client + competitors) but only for top 50 keywords
     const allDomains = [clientDomain, ...competitorDomains];
     const rankingsForTop50 = await getDomainRankings(
       allDomains,
@@ -807,12 +927,10 @@ export async function fetchKeywordData(
       location,
       locationCode
     );
-    console.log(
-      "Rankings fetched for all domains successfully (top 50 keywords)"
-    );
+    console.log("Rankings fetched for all domains successfully (top keywords)");
 
-    // 5. Combine all data
-    const combinedKeywordData = allKeywords.map((keyword) => {
+    // 6. Combine all data
+    const combinedKeywordData = filteredKeywords.map((keyword) => {
       // Check if we have data from keyword data
       const keywordDataItem = keywordData.find((kw) => kw.keyword === keyword);
 
@@ -917,7 +1035,8 @@ export async function fetchNationalCompetitors(
 export async function fetchLocalCompetitors(
   businessType: string,
   location: string,
-  businessUrl?: string
+  businessUrl?: string,
+  locationCode?: number
 ) {
   try {
     console.log(
@@ -925,7 +1044,12 @@ export async function fetchLocalCompetitors(
     );
 
     // Get local competitor data from DataForSEO
-    return await getLocalCompetitors(businessType, location, businessUrl);
+    return await getLocalCompetitors(
+      businessType,
+      location,
+      businessUrl,
+      locationCode
+    );
   } catch (error) {
     console.error("Error fetching local competitors:", error);
     throw new Error(

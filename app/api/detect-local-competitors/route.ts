@@ -3,7 +3,8 @@ import { fetchLocalCompetitors } from "@/lib/dataseo";
 
 export async function POST(request: Request) {
   try {
-    const { businessType, location, businessUrl } = await request.json();
+    const { businessType, location, businessUrl, locationCode } =
+      await request.json();
 
     if (!businessType || !location) {
       return NextResponse.json(
@@ -16,7 +17,8 @@ export async function POST(request: Request) {
     const result = await fetchLocalCompetitors(
       businessType,
       location,
-      businessUrl
+      businessUrl,
+      locationCode
     );
 
     return NextResponse.json({

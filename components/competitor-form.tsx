@@ -35,6 +35,7 @@ interface CompetitorFormProps {
   location: string;
   businessUrl: string;
   initialValues: CompetitorInfo;
+  locationCode?: number;
 }
 
 export const CompetitorForm = ({
@@ -45,6 +46,7 @@ export const CompetitorForm = ({
   location,
   businessUrl,
   initialValues,
+  locationCode,
 }: CompetitorFormProps) => {
   const [isLoading, setIsLoading] = useState(false);
   const [autoCompetitors, setAutoCompetitors] = useState<
@@ -87,6 +89,7 @@ export const CompetitorForm = ({
           businessType,
           location,
           businessUrl,
+          locationCode,
         }),
       });
       if (!response.ok) {

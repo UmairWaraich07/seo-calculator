@@ -33,7 +33,8 @@ export async function POST(request: Request) {
       keywords,
       basicInfo.analysisScope,
       basicInfo.location,
-      basicInfo.locationCode
+      basicInfo.locationCode,
+      basicInfo.businessType
     );
 
     // Calculate potential traffic and revenue

@@ -211,7 +211,7 @@ export function LocationSelector({
       setSelectedCity(city);
 
       // Update the value with city and state
-      onChange(`${city.name}, ${selectedState.name}`, city.code);
+      onChange(`${city.name}`, city.code);
       if (onLocationCodeChange) {
         onLocationCodeChange(city.code);
       }

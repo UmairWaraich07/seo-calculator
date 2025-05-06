@@ -218,6 +218,7 @@ export const Calculator = () => {
           location={basicInfo.location}
           businessUrl={basicInfo.businessUrl}
           initialValues={competitorInfo}
+          locationCode={basicInfo.locationCode}
         />
       )}
 

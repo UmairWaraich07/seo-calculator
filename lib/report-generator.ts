@@ -181,7 +181,7 @@ function generateNationalInsights(
 }
 
 /**
- * Get industry-specific conversion rates using OpenAI API with fallback
+ * Get industry-specific conversion rates using OpenAI API with fallback mechanism
  */
 async function getIndustryConversionRate(
   businessType: string,
@@ -200,162 +200,110 @@ async function getIndustryConversionRate(
   }
 }
 
-// OpenAI API integration
+// OpenAI API integration with enhanced prompt
 async function getConversionRateFromOpenAI(
   businessType: string,
   scope: "local" | "national"
 ): Promise<number> {
-  const prompt = `
-  You are an SEO expert specializing in conversion rate estimation. 
-  Provide a SINGLE NUMERIC VALUE representing the average conversion rate percentage for:
-  - Industry: ${businessType}
-  - Scope: ${scope}
-  - Value should reflect 2023 marketing benchmarks
-  - Consider local scope as 30% higher than national averages
-  - Format: Only respond with the numeric value, no text
-  - Example: For "plumbing"+"local", return "3.8"
-  `;
+  // Normalize business type to improve matching with industry data
+  const normalizedBusinessType = businessType.toLowerCase().trim();
 
   const response = await openai.chat.completions.create({
     model: "gpt-4o-mini",
-    messages: [{ role: "user", content: prompt }],
-    temperature: 0.2,
-    max_tokens: 10,
+    messages: [
+      {
+        role: "system",
+        content: `You are a data-driven SEO analyst specializing in industry-specific conversion rates. You have access to the latest 2025 digital marketing benchmarks across all industries. Your task is to provide precise, realistic conversion rates based on industry data.
+
+IMPORTANT GUIDELINES:
+- Respond ONLY with a single numeric value (no % symbol, text, or explanations)
+- For service businesses: provide rates between 0.8% and 8% 
+- For e-commerce/retail: provide rates between 0.5% and 4%
+- For B2B industries: provide rates between 0.2% and 3.5%
+- For professional services: provide rates between 1% and 9%
+- For medical/healthcare: provide rates between 1.8% and 7%
+- Local businesses consistently convert higher than national averages by 30-50%
+- High-ticket services have lower conversion rates than low-ticket services
+- Emergency services have higher conversion rates than discretionary services
+
+CALCULATION FACTORS:
+- Industry purchase frequency (emergency vs. planned)
+- Customer decision cycle length
+- Typical service/product price point
+- Geographic targeting precision
+- Seasonal variations (annual average)
+- Competition density in the specified sector`,
+      },
+      {
+        role: "user",
+        content: `Calculate the most accurate typical website conversion rate (visitor-to-customer percentage) for a ${normalizedBusinessType} business targeting ${
+          scope === "local"
+            ? "local customers in specific geographic areas"
+            : "customers across the entire United States"
+        }. Return only the numeric value without any symbols or text.`,
+      },
+    ],
+    temperature: 0.1, // Very low temperature for consistent, data-driven results
+    max_tokens: 5, // Extremely limited to force numeric-only response
   });
 
-  const rateText = response.choices[0]?.message?.content?.trim() || "0%";
-  const rate = parseFloat(rateText.replace("%", ""));
+  const rateText = response.choices[0]?.message?.content?.trim() || "0";
 
+  // Improved parsing logic to handle various formats
+  const cleanedText = rateText.replace(/[^\d\.]/g, ""); // Remove anything that's not a digit or decimal point
+  const rate = parseFloat(cleanedText);
+
+  // Validation with industry-appropriate bounds
   if (isNaN(rate)) throw new Error("Invalid numeric response from OpenAI");
-  if (rate < 0.1 || rate > 10)
-    throw new Error("Unrealistic conversion rate from OpenAI");
+
+  // Set reasonable min/max bounds for sanity check
+  const minRate = 0.1; // 0.1% minimum
+  const maxRate = 15.0; // 15% maximum for any industry
+
+  if (rate < minRate || rate > maxRate) {
+    console.warn(
+      `Unrealistic conversion rate (${rate}%) from OpenAI, clamping to valid range`
+    );
+    return Math.max(minRate, Math.min(rate, maxRate));
+  }
 
   return rate;
 }
 
-// Fallback conversion rates
-const FALLBACK_CONVERSION_RATES: Record<
-  string,
-  { local: number; national: number }
-> = {
-  // Home Services
-  plumbing: { local: 3.8, national: 2.5 },
-  roofing: { local: 4.2, national: 2.8 },
-  electrical: { local: 4.0, national: 2.6 },
-  hvac: { local: 4.1, national: 2.7 },
-  landscaping: { local: 4.5, national: 3.0 },
-  cleaning: { local: 3.9, national: 2.6 },
-  painting: { local: 3.7, national: 2.4 },
-  "pest control": { local: 4.3, national: 2.9 },
-
-  // Professional Services
-  dental: { local: 5.5, national: 3.8 },
-  legal: { local: 4.8, national: 3.2 },
-  accounting: { local: 4.2, national: 3.0 },
-  "real estate": { local: 3.5, national: 2.4 },
-  insurance: { local: 3.2, national: 2.1 },
-  architecture: { local: 3.0, national: 2.0 },
-
-  // Medical
-  veterinary: { local: 4.6, national: 3.1 },
-  chiropractic: { local: 4.4, national: 3.0 },
-  "physical therapy": { local: 4.0, national: 2.8 },
-  optometry: { local: 4.1, national: 2.9 },
-
-  // Automotive
-  "auto repair": { local: 3.9, national: 2.6 },
-  "car dealership": { local: 2.8, national: 2.3 },
-  "tire shop": { local: 3.5, national: 2.4 },
-  "car wash": { local: 3.2, national: 2.1 },
-
-  // Retail
-  restaurant: { local: 4.0, national: 2.7 },
-  "coffee shop": { local: 3.8, national: 2.6 },
-  bakery: { local: 3.6, national: 2.5 },
-  furniture: { local: 2.9, national: 2.2 },
-  jewelry: { local: 3.1, national: 2.3 },
-
-  // Technology
-  "software development": { local: 2.5, national: 2.4 },
-  "it support": { local: 3.0, national: 2.5 },
-  "web design": { local: 3.2, national: 2.7 },
-  cybersecurity: { local: 2.8, national: 2.6 },
-
-  // Personal Services
-  fitness: { local: 3.7, national: 2.6 },
-  "hair salon": { local: 4.2, national: 2.9 },
-  spa: { local: 4.0, national: 2.8 },
-  tattoo: { local: 3.5, national: 2.5 },
-  yoga: { local: 3.3, national: 2.4 },
-
-  // Education
-  tutoring: { local: 3.8, national: 2.7 },
-  "language school": { local: 3.2, national: 2.5 },
-  "driving school": { local: 3.6, national: 2.6 },
-
-  // Specialized Services
-  "event planning": { local: 3.4, national: 2.5 },
-  photography: { local: 3.1, national: 2.3 },
-  catering: { local: 3.7, national: 2.6 },
-  "funeral services": { local: 4.5, national: 3.2 },
-
-  // Industrial
-  manufacturing: { local: 2.8, national: 2.5 },
-  construction: { local: 3.3, national: 2.4 },
-  logistics: { local: 2.7, national: 2.3 },
-
-  // E-commerce
-  fashion: { local: 2.6, national: 2.6 },
-  electronics: { local: 2.4, national: 2.4 },
-  supplements: { local: 3.0, national: 3.0 },
-
-  // Defaults
-  "default service": { local: 3.0, national: 2.0 },
-  "default product": { local: 2.5, national: 2.5 },
-};
-
-// Enhanced matching logic with plural/synonym support
+/**
+ * Fallback conversion rates by industry category when API fails
+ */
 function getFallbackConversionRate(
   businessType: string,
   scope: "local" | "national"
 ): number {
-  const cleanType = businessType
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, "") // Remove special chars
-    .replace(/(services|service|company|shop|store)$/g, "") // Remove common suffixes
-    .trim();
+  // Categorize the business type
+  const type = businessType.toLowerCase();
+  let baseRate = 2.5; // Default moderate conversion rate
 
-  const industryMap: Record<string, string> = {
-    lawyer: "legal",
-    attorney: "legal",
-    dentist: "dental",
-    vet: "veterinary",
-    gym: "fitness",
-    barber: "hair salon",
-    tutor: "tutoring",
-    tech: "it support",
-  };
+  // Industry-specific base rates (national averages)
+  if (/real estate|property|home|apartment|housing/.test(type)) {
+    baseRate = 2.2;
+  } else if (/restaurant|food|cafe|catering|bakery/.test(type)) {
+    baseRate = 3.1;
+  } else if (/health|medical|doctor|dental|clinic|wellness/.test(type)) {
+    baseRate = 3.8;
+  } else if (/repair|plumbing|electric|roofing|contractor/.test(type)) {
+    baseRate = 4.5; // Home services typically convert well
+  } else if (/law|legal|attorney|lawyer/.test(type)) {
+    baseRate = 3.2;
+  } else if (/retail|shop|store|ecommerce/.test(type)) {
+    baseRate = 1.8;
+  } else if (/tech|software|it|digital/.test(type)) {
+    baseRate = 1.9;
+  } else if (/financial|accounting|tax|insurance/.test(type)) {
+    baseRate = 2.4;
+  } else if (/education|school|training|course|tutor/.test(type)) {
+    baseRate = 2.7;
+  } else if (/beauty|salon|spa|hair|cosmetic/.test(type)) {
+    baseRate = 3.4;
+  }
 
-  // Check for direct matches first
-  const directMatch = Object.keys(FALLBACK_CONVERSION_RATES).find((key) =>
-    cleanType.includes(key)
-  );
-
-  // Check for synonym matches
-  const synonymMatch = Object.entries(industryMap).find(([synonym]) =>
-    cleanType.includes(synonym)
-  );
-
-  const matchedKey =
-    directMatch || (synonymMatch ? industryMap[synonymMatch[0]] : null);
-
-  // Determine category type
-  const isProductBased = cleanType.match(/(product|goods|shop|store)/);
-  const defaultKey = isProductBased ? "default product" : "default service";
-
-  const rates = matchedKey
-    ? FALLBACK_CONVERSION_RATES[matchedKey]
-    : FALLBACK_CONVERSION_RATES[defaultKey];
-
-  return scope === "local" ? rates.local : rates.national;
+  // Apply scope multiplier
+  return scope === "local" ? baseRate * 1.4 : baseRate;
 }

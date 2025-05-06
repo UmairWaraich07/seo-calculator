@@ -60,7 +60,7 @@ export async function GET(request: Request) {
       }
 
       const data = await response.json();
-      console.log("DataForSEO locations response:", data.tasks[0].result);
+      // console.log("DataForSEO locations response:", data.tasks[0].result);
       const usLocations = data.tasks[0].result || [];
       console.log(`Found ${usLocations.length} US locations from DataForSEO`);
 
