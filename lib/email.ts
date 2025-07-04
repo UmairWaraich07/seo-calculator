@@ -5,7 +5,7 @@ import { ReportEmailTemplate } from "@/components/email/report-email-template";
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 // Default sender email
-const DEFAULT_FROM_EMAIL = "SEO Calculator <support@progini.ai>";
+const DEFAULT_FROM_EMAIL = "SEO Calculator <umair@joinaiautomation.com>";
 
 interface SendEmailOptions {
   to: string;

@@ -46,6 +46,8 @@ export async function POST(request: Request) {
       basicInfo.analysisScope
     );
 
+    console.log("Keyword Data: ", keywordData);
+
     // Create a new report document
     const newReport = {
       basicInfo,

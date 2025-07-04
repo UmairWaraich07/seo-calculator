@@ -781,7 +781,7 @@ ${JSON.stringify(keywords)}`,
         },
       ],
       response_format: { type: "json_object" },
-      temperature: 0.2,
+      temperature: 0.4,
     });
 
     try {
@@ -898,22 +898,18 @@ export async function fetchKeywordData(
     );
 
     // 3. Filter out keywords with zero search volume
-    const keywordsWithSearchVolume = keywordData.filter(
-      (kw) => kw.searchVolume > 0
-    );
-    console.log(
-      `Filtered out ${
-        keywordData.length - keywordsWithSearchVolume.length
-      } keywords with zero search volume`
-    );
+    // const keywordsWithSearchVolume = keywordData.filter(
+    //   (kw) => kw.searchVolume > 0
+    // );
+    // console.log(
+    //   `Filtered out ${
+    //     keywordData.length - keywordsWithSearchVolume.length
+    //   } keywords with zero search volume`
+    // );
 
     // 4. Sort keywords by search volume and take only the top 50
-    keywordsWithSearchVolume.sort(
-      (a, b) => (b.searchVolume || 0) - (a.searchVolume || 0)
-    );
-    const top50Keywords = keywordsWithSearchVolume
-      .slice(0, 50)
-      .map((kw) => kw.keyword);
+    keywordData.sort((a, b) => (b.searchVolume || 0) - (a.searchVolume || 0));
+    const top50Keywords = keywordData.slice(0, 50).map((kw) => kw.keyword);
 
     console.log(
       `Selected top ${top50Keywords.length} keywords by search volume for ranking analysis`
@@ -961,7 +957,6 @@ export async function fetchKeywordData(
       // Use the best data available
       const searchVolume =
         rankedData?.searchVolume || keywordDataItem?.searchVolume || 0;
-
       const cpc = rankedData?.cpc || keywordDataItem?.cpc || "0.00";
 
       // Add scope-specific data
@@ -982,6 +977,11 @@ export async function fetchKeywordData(
         ...scopeData,
       };
     });
+    // .filter((kw) => kw.searchVolume > 0); // Filter out keywords with zero search volume
+
+    console.log(
+      `Final keyword data contains ${combinedKeywordData.length} keywords with search volume > 0`
+    );
 
     // Sort keywords by search volume (highest first)
     combinedKeywordData.sort((a, b) => b.searchVolume - a.searchVolume);
@@ -994,9 +994,7 @@ export async function fetchKeywordData(
     };
   } catch (error) {
     console.error("Error fetching data from DataForSEO:", error);
-    throw new Error(
-      `Failed to fetch keyword data: ${(error as Error).message}`
-    );
+    throw new Error(`Failed to fetch keyword data: ${error}`);
   }
 }
 

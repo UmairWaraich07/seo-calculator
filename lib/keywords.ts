@@ -79,8 +79,7 @@ OUTPUT REQUIREMENTS:
           }. Focus on keywords that potential customers would use when ready to make a purchase or hire this service.`,
         },
       ],
-      temperature: 0.4, // Slightly lower temperature for more focused results with increased keyword count
-      max_tokens: 1000, // Increased token limit to ensure all 50 keywords are generated
+      temperature: 0.5, // Slightly lower temperature for more focused results with increased keyword count
     });
 
     const content = response.choices[0]?.message?.content;
