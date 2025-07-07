@@ -297,7 +297,7 @@ export async function getLocationCode(location: string): Promise<number> {
  */
 async function pollForResults(
   taskIds: string[],
-  maxAttempts = 20,
+  maxAttempts = 10,
   initialDelay = 5000,
   endpointType = "keywords_data"
 ) {
@@ -555,10 +555,13 @@ function processLocalCompetitorData(
             if (result.items && Array.isArray(result.items)) {
               // Get local businesses from the results
               for (const item of result.items) {
+                // Skip competitors that don't have a website URL
+                if (!item.url || item.url.trim() === "") {
+                  continue;
+                }
+
                 // Normalize the competitor URL by removing trailing slash if present
-                const normalizedItemUrl = item.url
-                  ? item.url.replace(/\/$/, "")
-                  : "";
+                const normalizedItemUrl = item.url.replace(/\/$/, "");
 
                 // Skip the user's own business if the normalized URLs match
                 if (

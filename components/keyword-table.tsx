@@ -1,202 +1,163 @@
-"use client";
-
-import { useState } from "react";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Search, ArrowUpDown, MapPin } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+
+interface KeywordData {
+  keyword: string;
+  searchVolume: number;
+  clientRank: number | string;
+  isLocal?: boolean;
+}
 
 interface KeywordTableProps {
-  keywordData: any[];
-  analysisScope?: "local" | "national";
+  keywordData: KeywordData[];
+  analysisScope: string;
 }
 
 export const KeywordTable = ({
   keywordData,
-  analysisScope = "local",
+  analysisScope,
 }: KeywordTableProps) => {
-  const [searchTerm, setSearchTerm] = useState("");
-  const [sortField, setSortField] = useState<
-    "keyword" | "searchVolume" | "clientRank"
-  >("searchVolume");
-  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
-  const [filter, setFilter] = useState<"all" | "local" | "national">("all");
+  // Sort keywords by search volume (highest first)
+  const sortedKeywords = [...keywordData].sort(
+    (a, b) => b.searchVolume - a.searchVolume
+  );
 
-  // Filter and sort keywords
-  const filteredKeywords = keywordData
-    .filter((kw) => {
-      // Apply search filter
-      const matchesSearch = kw.keyword
-        .toLowerCase()
-        .includes(searchTerm.toLowerCase());
+  const getRankColor = (rank: number | string) => {
+    if (rank === "Not ranked") return "text-slate-400";
+    const numRank = typeof rank === "string" ? Number.parseInt(rank) : rank;
+    if (numRank <= 3) return "text-green-400 font-semibold";
+    if (numRank <= 10) return "text-blue-400 font-semibold";
+    if (numRank <= 50) return "text-yellow-400";
+    return "text-red-400";
+  };
 
-      // Apply local/national filter
-      if (filter === "all") return matchesSearch;
-      if (filter === "local") return matchesSearch && kw.isLocal;
-      if (filter === "national") return matchesSearch && !kw.isLocal;
+  const getRankBadge = (rank: number | string) => {
+    if (rank === "Not ranked") return null;
+    const numRank = typeof rank === "string" ? Number.parseInt(rank) : rank;
+    if (numRank <= 3)
+      return (
+        <Badge className="bg-green-500/20 text-green-400 border-green-500/30">
+          Top 3
+        </Badge>
+      );
+    if (numRank <= 10)
+      return (
+        <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30">
+          Top 10
+        </Badge>
+      );
+    if (numRank <= 50)
+      return (
+        <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30">
+          Top 50
+        </Badge>
+      );
+    return (
+      <Badge className="bg-red-500/20 text-red-400 border-red-500/30">
+        Top 100+
+      </Badge>
+    );
+  };
 
-      return matchesSearch;
-    })
-    .sort((a, b) => {
-      if (sortField === "keyword") {
-        return sortDirection === "asc"
-          ? a.keyword.localeCompare(b.keyword)
-          : b.keyword.localeCompare(a.keyword);
-      } else if (sortField === "searchVolume") {
-        return sortDirection === "asc"
-          ? a.searchVolume - b.searchVolume
-          : b.searchVolume - a.searchVolume;
-      } else {
-        // Handle "Not ranked" values
-        const rankA = a.clientRank === "Not ranked" ? 101 : a.clientRank;
-        const rankB = b.clientRank === "Not ranked" ? 101 : b.clientRank;
-
-        return sortDirection === "asc" ? rankA - rankB : rankB - rankA;
-      }
-    });
-
-  const toggleSort = (field: "keyword" | "searchVolume" | "clientRank") => {
-    if (sortField === field) {
-      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
-    } else {
-      setSortField(field);
-      setSortDirection("desc");
+  const formatSearchVolume = (volume: number) => {
+    if (volume >= 1000000) {
+      return (volume / 1000000).toFixed(1) + "M";
     }
+    if (volume >= 1000) {
+      return (volume / 1000).toFixed(1) + "K";
+    }
+    return volume.toLocaleString();
   };
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-4">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
-          <Input
-            placeholder="Search keywords..."
-            className="pl-8"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-        </div>
-
-        <Select
-          value={filter}
-          onValueChange={(value) =>
-            setFilter(value as "all" | "local" | "national")
-          }
-        >
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Filter keywords" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Keywords</SelectItem>
-            <SelectItem value="local">Local Keywords</SelectItem>
-            <SelectItem value="national">National Keywords</SelectItem>
-          </SelectContent>
-        </Select>
+    <div className="space-y-4">
+      <div className="text-slate-300 text-sm">
+        Showing top {Math.min(sortedKeywords.length, 50)} keywords ranked by
+        search volume
+        {analysisScope === "local" && " (including local variations)"}
       </div>
 
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-[50%]">
-                <Button
-                  variant="ghost"
-                  onClick={() => toggleSort("keyword")}
-                  className="flex items-center p-0 h-auto font-semibold"
-                >
-                  Keyword
-                  <ArrowUpDown className="ml-2 h-4 w-4" />
-                </Button>
-              </TableHead>
-              <TableHead className="text-center">
-                <Button
-                  variant="ghost"
-                  onClick={() => toggleSort("searchVolume")}
-                  className="flex items-center p-0 h-auto font-semibold"
-                >
-                  Monthly Searches
-                  <ArrowUpDown className="ml-2 h-4 w-4" />
-                </Button>
-              </TableHead>
-              <TableHead className="text-center">
-                <Button
-                  variant="ghost"
-                  onClick={() => toggleSort("clientRank")}
-                  className="flex items-center p-0 h-auto font-semibold"
-                >
-                  Current Rank
-                  <ArrowUpDown className="ml-2 h-4 w-4" />
-                </Button>
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filteredKeywords.length === 0 ? (
-              <TableRow>
-                <TableCell
-                  colSpan={3}
-                  className="text-center py-6 text-slate-500"
-                >
-                  No keywords found
-                </TableCell>
-              </TableRow>
-            ) : (
-              filteredKeywords.map((kw, index) => (
-                <TableRow key={index}>
-                  <TableCell className="font-medium">
-                    <div className="flex items-center">
-                      {kw.keyword}
-                      {kw.isLocal && (
-                        <Badge
-                          variant="outline"
-                          className="ml-2 flex items-center gap-1"
-                        >
-                          <MapPin className="h-3 w-3" />
-                          Local
-                        </Badge>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-center">
-                    {kw.searchVolume.toLocaleString()}
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <span
-                      className={
-                        kw.clientRank === "Not ranked"
-                          ? "text-slate-500"
-                          : kw.clientRank <= 3
-                          ? "text-green-600 font-medium"
-                          : kw.clientRank <= 10
-                          ? "text-blue-600 font-medium"
-                          : kw.clientRank <= 50
-                          ? "text-amber-600"
-                          : "text-red-600"
-                      }
-                    >
-                      {kw.clientRank}
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-slate-700">
+              <th className="text-left py-4 px-4 text-slate-300 font-semibold">
+                Keyword
+              </th>
+              <th className="text-center py-4 px-4 text-slate-300 font-semibold">
+                Monthly Searches
+              </th>
+              <th className="text-center py-4 px-4 text-slate-300 font-semibold">
+                Current Rank
+              </th>
+              <th className="text-center py-4 px-4 text-slate-300 font-semibold">
+                Status
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-700">
+            {sortedKeywords.slice(0, 50).map((keyword, index) => (
+              <tr
+                key={index}
+                className="hover:bg-slate-800/50 transition-colors"
+              >
+                <td className="py-4 px-4">
+                  <div className="flex items-center gap-2">
+                    <span className="text-white font-medium">
+                      {keyword.keyword}
                     </span>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+                    {keyword.isLocal && (
+                      <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30 text-xs">
+                        Local
+                      </Badge>
+                    )}
+                  </div>
+                </td>
+                <td className="py-4 px-4 text-center">
+                  <span className="text-white font-semibold">
+                    {formatSearchVolume(keyword.searchVolume)}
+                  </span>
+                </td>
+                <td
+                  className={`py-4 px-4 text-center ${getRankColor(
+                    keyword.clientRank
+                  )}`}
+                >
+                  <span className="font-medium">
+                    {keyword.clientRank === "Not ranked"
+                      ? "Not ranked"
+                      : `#${keyword.clientRank}`}
+                  </span>
+                </td>
+                <td className="py-4 px-4 text-center">
+                  {getRankBadge(keyword.clientRank) || (
+                    <Badge className="bg-slate-600/20 text-slate-400 border-slate-600/30">
+                      Unranked
+                    </Badge>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {sortedKeywords.length > 50 && (
+        <div className="text-center py-4">
+          <div className="text-slate-400 text-sm">
+            Showing top 50 of {sortedKeywords.length} total keywords
+          </div>
+        </div>
+      )}
+
+      <div className="bg-slate-700 rounded-lg p-4 mt-6">
+        <h4 className="font-semibold text-white mb-2">
+          💡 Ranking Opportunity
+        </h4>
+        <p className="text-slate-300 text-sm">
+          These keywords represent significant traffic opportunities. Focus on
+          improving rankings for high-volume keywords where you're currently
+          ranking between positions 11-50 for the quickest wins.
+        </p>
       </div>
     </div>
   );
