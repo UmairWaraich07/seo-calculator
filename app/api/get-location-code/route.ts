@@ -61,6 +61,7 @@ async function fetchStates(): Promise<any[]> {
   try {
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
     const response = await fetch(`${baseUrl}/api/locations`);
+    console.log("/locations response, ", response);
 
     if (!response.ok) {
       throw new Error(`Failed to fetch states: ${response.status}`);
