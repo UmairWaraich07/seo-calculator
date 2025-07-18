@@ -1,5 +1,12 @@
 import { type NextRequest, NextResponse } from "next/server";
 
+// Basic Auth credentials
+const DATAFORSEO_LOGIN = process.env.DATAFORSEO_LOGIN || "";
+const DATAFORSEO_PASSWORD = process.env.DATAFORSEO_PASSWORD || "";
+const BASIC_AUTH_HEADER = `Basic ${Buffer.from(
+  `${DATAFORSEO_LOGIN}:${DATAFORSEO_PASSWORD}`
+).toString("base64")}`;
+
 // Helper function for fuzzy matching
 function findBestMatch(
   items: any[],
@@ -56,12 +63,17 @@ function findBestMatch(
   return bestMatch;
 }
 
-// Fetch states from your existing API
+// Fetch states from your existing API (with Basic Auth)
 async function fetchStates(): Promise<any[]> {
   try {
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-    const response = await fetch(`${baseUrl}/api/locations`);
-    console.log("/locations response, ", response);
+    const response = await fetch(`${baseUrl}/api/locations`, {
+      headers: {
+        Authorization: BASIC_AUTH_HEADER,
+      },
+    });
+
+    console.log("/locations response, ", response.status);
 
     if (!response.ok) {
       throw new Error(`Failed to fetch states: ${response.status}`);
@@ -75,12 +87,17 @@ async function fetchStates(): Promise<any[]> {
   }
 }
 
-// Fetch cities for a specific state from your existing API
+// Fetch cities for a specific state (with Basic Auth)
 async function fetchCities(stateName: string): Promise<any[]> {
   try {
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
     const response = await fetch(
-      `${baseUrl}/api/locations?state=${encodeURIComponent(stateName)}`
+      `${baseUrl}/api/locations?state=${encodeURIComponent(stateName)}`,
+      {
+        headers: {
+          Authorization: BASIC_AUTH_HEADER,
+        },
+      }
     );
 
     if (!response.ok) {
@@ -134,7 +151,7 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(
-      `[get-location-code] POST - Matched state: ${matchedState.name} (code: ${matchedState.code})`
+      `[get-location-code] Matched state: ${matchedState.name} (code: ${matchedState.code})`
     );
 
     // If city is provided, try to find it
@@ -145,7 +162,7 @@ export async function POST(request: NextRequest) {
 
         if (matchedCity) {
           console.log(
-            `[get-location-code] POST - Matched city: ${matchedCity.name} (code: ${matchedCity.code})`
+            `[get-location-code] Matched city: ${matchedCity.name} (code: ${matchedCity.code})`
           );
           return NextResponse.json({
             success: true,
@@ -161,12 +178,12 @@ export async function POST(request: NextRequest) {
           });
         } else {
           console.log(
-            `[get-location-code] POST - City "${city}" not found in ${matchedState.name}, falling back to state`
+            `[get-location-code] City "${city}" not found in ${matchedState.name}, falling back to state`
           );
         }
       } catch (error) {
         console.error(
-          `[get-location-code] POST - Error fetching cities for ${matchedState.name}:`,
+          `[get-location-code] Error fetching cities for ${matchedState.name}:`,
           error
         );
         // Fall back to state code if city lookup fails
@@ -175,7 +192,7 @@ export async function POST(request: NextRequest) {
 
     // Fallback to state code
     console.log(
-      `[get-location-code] POST - Using state code: ${matchedState.code} for ${matchedState.name}`
+      `[get-location-code] Using state code: ${matchedState.code} for ${matchedState.name}`
     );
     return NextResponse.json({
       success: true,
@@ -188,7 +205,7 @@ export async function POST(request: NextRequest) {
       source: "DataForSEO",
     });
   } catch (error) {
-    console.error("[get-location-code] POST - Error in API:", error);
+    console.error("[get-location-code] Error in API:", error);
     return NextResponse.json(
       {
         error: "Internal server error",
