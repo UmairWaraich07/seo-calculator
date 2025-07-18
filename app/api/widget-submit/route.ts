@@ -41,7 +41,9 @@ export async function POST(request: Request) {
       formData.competitors.filter(Boolean), // Filter out empty strings
       keywords,
       formData.analysisScope,
-      formData.location
+      formData.location,
+      formData.locationCode,
+      formData.businessType // Pass the location code from the widget
     );
 
     // Calculate potential traffic and revenue
@@ -58,6 +60,7 @@ export async function POST(request: Request) {
         businessUrl: formData.businessUrl,
         businessType: formData.businessType,
         location: formData.location,
+        locationCode: formData.locationCode,
         customerValue: Number.parseFloat(formData.customerValue),
         analysisScope: formData.analysisScope,
         competitorType: formData.competitorType,
@@ -65,13 +68,31 @@ export async function POST(request: Request) {
       report: reportData,
     };
 
+    // Fix competitorRanks objects for MongoDB
+    const fixedKeywordData = {
+      ...keywordData,
+      keywordData: keywordData.keywordData.map((kw: any) => ({
+        ...kw,
+        competitorRanks: JSON.parse(JSON.stringify(kw.competitorRanks)),
+      })),
+    };
+
+    // Fix report competitorRanks objects for MongoDB
+    const fixedReportData = {
+      ...reportData,
+      keywordData: reportData.keywordData.map((kw: any) => ({
+        ...kw,
+        competitorRanks: JSON.parse(JSON.stringify(kw.competitorRanks)),
+      })),
+    };
+
     // Save report to database
     const newReport = new Report({
       basicInfo: fullReport.basicInfo,
       competitorInfo: { competitors: formData.competitors.filter(Boolean) },
       keywords,
-      keywordData,
-      report: reportData,
+      keywordData: fixedKeywordData,
+      report: fixedReportData,
       createdAt: new Date(),
       emailSent: false,
       source: "widget",

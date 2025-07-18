@@ -846,7 +846,6 @@ export async function fetchKeywordData(
     const competitors = competitorUrls.map((url) => ({
       url,
       name: getDomainFromUrl(url),
-      source: url.includes("maps") ? "Google Maps" : "DataForSEO",
     }));
 
     console.log(
@@ -855,7 +854,7 @@ export async function fetchKeywordData(
 
     // 1. Get ranked keywords for competitors only (not for client domain)
     const competitorRankedKeywordsPromises = competitorDomains.map((domain) =>
-      getRankedKeywords(domain, location, 10)
+      getRankedKeywords(domain, location, 30)
     );
 
     const competitorRankedKeywordsResults = await Promise.all(
@@ -881,6 +880,8 @@ export async function fetchKeywordData(
       ...new Set([...keywords, ...Array.from(allRankedKeywords.keys())]),
     ];
 
+    console.log(`Total keywords for analysis: ${allKeywords}`);
+
     console.log(`Combined keywords for analysis: ${allKeywords.length}`);
 
     // Filter the irrelevant keywords from the list before getting the keyword data
@@ -892,27 +893,44 @@ export async function fetchKeywordData(
       location
     );
 
+    // const clientRankedKeywords = await getRankedKeywords(
+    //   clientDomain,
+    //   location,
+    //   100
+    // );
+
+    // console.log("client Ranked keywords, ", clientRankedKeywords);
+    // const clientRankedKeywordsArray = clientRankedKeywords.map(
+    //   (k) => k.keyword
+    // );
+
     // 2. Get keyword data for all keywords (now filtered)
     const keywordData = await getKeywordData(
-      filteredKeywords,
+      [...filteredKeywords],
       location,
       "en",
       locationCode
     );
 
+    console.log("keyword data: ", keywordData);
+
     // 3. Filter out keywords with zero search volume
-    // const keywordsWithSearchVolume = keywordData.filter(
-    //   (kw) => kw.searchVolume > 0
-    // );
-    // console.log(
-    //   `Filtered out ${
-    //     keywordData.length - keywordsWithSearchVolume.length
-    //   } keywords with zero search volume`
-    // );
+    const keywordsWithSearchVolume = keywordData.filter(
+      (kw) => kw.searchVolume > 0
+    );
+    console.log(
+      `Filtered out ${
+        keywordData.length - keywordsWithSearchVolume.length
+      } keywords with zero search volume`
+    );
 
     // 4. Sort keywords by search volume and take only the top 50
-    keywordData.sort((a, b) => (b.searchVolume || 0) - (a.searchVolume || 0));
-    const top50Keywords = keywordData.slice(0, 50).map((kw) => kw.keyword);
+    keywordsWithSearchVolume.sort(
+      (a, b) => (b.searchVolume || 0) - (a.searchVolume || 0)
+    );
+    const top50Keywords = keywordsWithSearchVolume
+      .slice(0, 50)
+      .map((kw) => kw.keyword);
 
     console.log(
       `Selected top ${top50Keywords.length} keywords by search volume for ranking analysis`
@@ -928,59 +946,41 @@ export async function fetchKeywordData(
     );
     console.log("Rankings fetched for all domains successfully (top keywords)");
 
-    // 6. Combine all data
-    const combinedKeywordData = filteredKeywords.map((keyword) => {
-      // Check if we have data from keyword data
-      const keywordDataItem = keywordData.find((kw) => kw.keyword === keyword);
+    // 6. Combine all data - FIXED: Use keywordsWithSearchVolume instead of filteredKeywords
+    const combinedKeywordData = keywordsWithSearchVolume
+      .map((keywordDataItem) => {
+        const keyword = keywordDataItem.keyword;
 
-      // Check if we have data from ranked keywords
-      const rankedData = allRankedKeywords.get(keyword);
+        // Check if we have data from ranked keywords
+        const rankedData = allRankedKeywords.get(keyword);
 
-      // Determine if this is a local-specific keyword
-      const isLocal =
-        keyword.includes("near me") ||
-        keyword.toLowerCase().includes("local") ||
-        keyword.includes("in ") ||
-        keyword.includes("near ");
-
-      // Get client rank for this keyword (only if it's in top 50, otherwise null)
-      const clientRank = top50Keywords.includes(keyword)
-        ? rankingsForTop50[clientDomain][keyword]
-        : null;
-
-      // Get competitor ranks for this keyword (only if it's in top 50, otherwise null)
-      const competitorRanks: Record<string, number | null> = {};
-      competitorUrls.forEach((url, i) => {
-        const domain = competitorDomains[i];
-        competitorRanks[url] = top50Keywords.includes(keyword)
-          ? rankingsForTop50[domain][keyword]
+        // Get client rank for this keyword (only if it's in top 50, otherwise null)
+        const clientRank = top50Keywords.includes(keyword)
+          ? rankingsForTop50[clientDomain][keyword]
           : null;
-      });
 
-      // Use the best data available
-      const searchVolume =
-        rankedData?.searchVolume || keywordDataItem?.searchVolume || 0;
-      const cpc = rankedData?.cpc || keywordDataItem?.cpc || "0.00";
+        // Get competitor ranks for this keyword (only if it's in top 50, otherwise null)
+        const competitorRanks: Record<string, number | null> = {};
+        competitorUrls.forEach((url, i) => {
+          const domain = competitorDomains[i];
+          competitorRanks[url] = top50Keywords.includes(keyword)
+            ? rankingsForTop50[domain][keyword]
+            : null;
+        });
 
-      // Add scope-specific data
-      const scopeData =
-        analysisScope === "local"
-          ? {
-              hasLocalPack: isLocal,
-              localIntent: isLocal ? 8 : 3,
-            }
-          : { cpc };
+        // Use the best data available - prioritize keywordDataItem since it's already filtered
+        const searchVolume =
+          keywordDataItem.searchVolume || rankedData?.searchVolume || 0;
+        const cpc = keywordDataItem.cpc || rankedData?.cpc || "0.00";
 
-      return {
-        keyword,
-        searchVolume,
-        clientRank,
-        competitorRanks,
-        isLocal,
-        ...scopeData,
-      };
-    });
-    // .filter((kw) => kw.searchVolume > 0); // Filter out keywords with zero search volume
+        return {
+          keyword,
+          searchVolume,
+          clientRank,
+          competitorRanks,
+        };
+      })
+      .filter((kw) => kw.searchVolume > 0); // Extra safety filter
 
     console.log(
       `Final keyword data contains ${combinedKeywordData.length} keywords with search volume > 0`
