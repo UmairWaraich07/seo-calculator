@@ -46,7 +46,7 @@ export async function POST(request: Request) {
       competitorUrls = competitorInfo.map((c) => c.url);
     }
 
-    // console.log("Competitor Info:", competitorInfo);
+    console.log("Competitor Info:", competitorInfo);
 
     // Step 2. Process result and generate keywords
     const keywords = await generateKeywords(
@@ -91,10 +91,10 @@ export async function POST(request: Request) {
       { status: 200 }
     );
   } catch (error: any) {
-    console.error("Error detecting local competitors:", error);
+    console.error("Error generating report: ", error);
     return NextResponse.json(
       {
-        error: "Failed to detect local competitors",
+        error: "Failed to generate report",
         details: error.message,
       },
       { status: 500 }
